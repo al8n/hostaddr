@@ -1,13 +1,13 @@
 [package]
-name = "template-rs"
-version = "0.0.0"
+name = "hostaddr"
+version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/al8n/template-rs"
-homepage = "https://github.com/al8n/template-rs"
-documentation = "https://docs.rs/template-rs"
+repository = "https://github.com/al8n/hostaddr"
+homepage = "https://github.com/al8n/hostaddr"
+documentation = "https://docs.rs/hostaddr"
 description = "A template for creating Rust open-source repo on GitHub"
 license = "MIT OR Apache-2.0"
-rust-version = "1.73"
+rust-version = "1.81"
 
 [[bench]]
 path = "benches/foo.rs"
@@ -16,14 +16,48 @@ harness = false
 
 [features]
 default = ["std"]
-alloc = []
-std = []
+alloc = ["idna/alloc", "percent-encoding/alloc", "memchr/alloc"]
+std = [
+  "idna/default",
+  "percent-encoding/default",
+  "thiserror/default",
+  "simdutf8/default",
+  "memchr/default",
+  "smol_str_0_3?/default",
+  "triomphe_0_1?/default",
+]
+
+smol_str = ["smol_str_0_3"]
+triomphe = ["triomphe_0_1"]
+
+serde = ["dep:serde", "smol_str_0_3?/serde", "triomphe_0_1?/serde"]
 
 [dependencies]
+derive_more = { version = "2", features = ["display", "from", "is_variant", "unwrap", "try_unwrap", "as_ref"] }
+either = { version = "1", default-features = false }
+idna = { version = "1", default-features = false }
+memchr = { version = "2", default-features = false }
+percent-encoding = { version = "2", default-features = false }
+simdutf8 = { version = "0.1", default-features = false }
+thiserror = { version = "2", default-features = false }
+
+
+smol_str_0_3 = { package = "smol_str", version = "0.3", default-features = false, optional = true }
+triomphe_0_1 = { package = "triomphe", version = "0.1", default-features = false, optional = true }
+
+serde = { version = "1", optional = true, default-features = false, features = ["derive"] }
+
+arbitrary = { version = "1", optional = true, default-features = false, features = ["derive"] }
+quickcheck = { version = "1", optional = true, default-features = false }
 
 [dev-dependencies]
-criterion = "0.5"
-tempfile = "3"
+quickcheck = "1"
+quickcheck_macros = "1"
+arbitrary = "1"
+paste = "1"
+serde_json = "1"
+serde = { version = "1", features = ["rc"] }
+rmp-serde = "1"
 
 [profile.bench]
 opt-level = 3
