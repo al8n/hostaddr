@@ -1,39 +1,74 @@
 [package]
-name = "template-rs"
-version = "0.0.0"
+name = "hostaddr"
+version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/al8n/template-rs"
-homepage = "https://github.com/al8n/template-rs"
-documentation = "https://docs.rs/template-rs"
+repository = "https://github.com/al8n/hostaddr"
+homepage = "https://github.com/al8n/hostaddr"
+documentation = "https://docs.rs/hostaddr"
 description = "A template for creating Rust open-source repo on GitHub"
 license = "MIT OR Apache-2.0"
-rust-version = "1.73"
-
-[[bench]]
-path = "benches/foo.rs"
-name = "foo"
-harness = false
+rust-version = "1.81"
 
 [features]
 default = ["std"]
-alloc = []
-std = []
+alloc = ["idna/alloc", "idna/compiled_data", "percent-encoding/alloc", "memchr/alloc", "tinyvec_1?/alloc"]
+std = [
+  "idna/default",
+  "percent-encoding/default",
+  "thiserror/default",
+  "simdutf8/default",
+  "memchr/default",
+  "smol_str_0_3?/default",
+  "triomphe_0_1?/default",
+  "bytes_1?/default",
+  "tinyvec_1?/default",
+]
+
+smol_str = ["smol_str_0_3"]
+triomphe = ["triomphe_0_1"]
+bytes = ["bytes_1"]
+tinyvec = ["tinyvec_1"]
+smallvec = ["smallvec_1"]
+
+serde = [
+  "dep:serde",
+  "smol_str_0_3?/serde",
+  "triomphe_0_1?/serde",
+  "bytes_1?/serde",
+  "smallvec_1?/serde",
+  "tinyvec_1?/serde",
+]
+
+arbitrary = ["dep:arbitrary", "smol_str_0_3?/arbitrary", "tinyvec_1?/arbitrary", "smallvec_1?/arbitrary"]
 
 [dependencies]
+derive_more = { version = "2", features = ["display", "from", "is_variant", "unwrap", "try_unwrap", "as_ref"] }
+either = { version = "1", default-features = false }
+idna = { version = "1", default-features = false }
+memchr = { version = "2", default-features = false }
+percent-encoding = { version = "2", default-features = false }
+simdutf8 = { version = "0.1", default-features = false }
+thiserror = { version = "2", default-features = false }
+
+bytes_1 = { package = "bytes", version = "1", default-features = false, optional = true }
+smol_str_0_3 = { package = "smol_str", version = "0.3", default-features = false, optional = true }
+triomphe_0_1 = { package = "triomphe", version = "0.1", default-features = false, optional = true }
+tinyvec_1 = { package = "tinyvec", version = "1", default-features = false, features = ["rustc_1_61"], optional = true }
+smallvec_1 = { package = "smallvec", version = "1", default-features = false, optional = true }
+
+serde = { version = "1", optional = true, default-features = false, features = ["derive"] }
+
+arbitrary = { version = "1", optional = true, default-features = false, features = ["derive"] }
+quickcheck = { version = "1", optional = true, default-features = false }
 
 [dev-dependencies]
-criterion = "0.5"
-tempfile = "3"
-
-[profile.bench]
-opt-level = 3
-debug = false
-codegen-units = 1
-lto = 'thin'
-incremental = false
-debug-assertions = false
-overflow-checks = false
-rpath = false
+quickcheck = "1"
+quickcheck_macros = "1"
+arbitrary = "1"
+paste = "1"
+serde_json = "1"
+serde = { version = "1", features = ["rc"] }
+rmp-serde = "1"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -42,6 +77,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lints.rust]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(all_tests)',
-] }
