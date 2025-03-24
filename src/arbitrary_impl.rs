@@ -88,7 +88,7 @@ macro_rules! impl_arbitrary {
       impl<'a> Arbitrary<'a> for Host<$ty> {
         fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
           Ok(if u.arbitrary()? {
-            Host::Domain(Arbitrary::arbitrary(u)?)
+            Host::Domain(<Domain<$ty> as Arbitrary>::arbitrary(u)?.0)
           } else {
             Host::Ip(Arbitrary::arbitrary(u)?)
           })
@@ -122,6 +122,11 @@ impl_arbitrary!(
 #[cfg(feature = "smol_str_0_3")]
 impl_arbitrary!(
   smol_str_0_3::SmolStr { |d: Domain<String>| { Domain(d.0.into()) } },
+);
+
+#[cfg(feature = "bytes_1")]
+impl_arbitrary!(
+  bytes_1::Bytes { |d: Domain<String>| { Domain(d.0.into_bytes().into()) } },
 );
 
 #[cfg(feature = "triomphe_0_1")]

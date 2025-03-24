@@ -16,7 +16,7 @@ mod inlined;
 /// The provided input could not be parsed because
 /// it is not a syntactically-valid DNS Domain.
 #[derive(Debug, Clone, Copy, thiserror::Error)]
-#[error("invalid domain")]
+#[error("{}", self.as_str())]
 pub struct ParseDomainError(pub(super) ());
 
 impl ParseDomainError {
@@ -24,6 +24,20 @@ impl ParseDomainError {
   #[inline]
   pub const fn as_str(&self) -> &'static str {
     "invalid domain"
+  }
+}
+
+/// The provided input could not be parsed because
+/// it is not an ASCII syntactically-valid DNS Domain.
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("{}", self.as_str())]
+pub struct ParseAsciiDomainError(pub(super) ());
+
+impl ParseAsciiDomainError {
+  /// Returns the error message.
+  #[inline]
+  pub const fn as_str(&self) -> &'static str {
+    "invalid ASCII domain"
   }
 }
 
@@ -100,6 +114,116 @@ impl<S> Borrow<S> for Domain<S> {
   #[inline]
   fn borrow(&self) -> &S {
     &self.0
+  }
+}
+
+impl<S> AsRef<str> for Domain<S>
+where
+  S: AsRef<str>,
+{
+  #[inline]
+  fn as_ref(&self) -> &str {
+    self.0.as_ref()
+  }
+}
+
+impl<S> AsRef<[u8]> for Domain<S>
+where
+  S: AsRef<[u8]>,
+{
+  #[inline]
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref()
+  }
+}
+
+impl<S> Domain<&S> {
+  /// Maps an `Domain<&S>` to an `Domain<S>` by copying the contents of the
+  /// domain.
+  #[inline]
+  pub const fn copied(self) -> Domain<S>
+  where
+    S: Copy,
+  {
+    Domain(*self.0)
+  }
+
+  /// Maps an `Domain<&S>` to an `Domain<S>` by cloning the contents of the
+  /// domain.
+  #[inline]
+  pub fn cloned(self) -> Domain<S>
+  where
+    S: Clone,
+  {
+    Domain(self.0.clone())
+  }
+}
+
+impl<'a> Domain<&'a str> {
+  /// Parses a domain name from `&str`.
+  ///
+  /// Unlike `Domain::try_from_str`, this method does not perform any percent decoding
+  /// or punycode decoding. If the input is not ASCII, it will return an error.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Domain;
+  ///
+  /// let domain = Domain::try_from_ascii_str("example.com").unwrap();
+  /// assert_eq!(domain.into_inner(), "example.com");
+  ///
+  /// // This will return an error because the domain is not ASCII.
+  /// assert!(Domain::try_from_ascii_str("测试.中国").is_err());
+  ///
+  /// // Thie will not return an error, even though the human-readable domain is not ASCII.
+  /// let domain = Domain::try_from_ascii_str("xn--0zwm56d.xn--fiqs8s").unwrap();
+  /// assert_eq!(domain.into_inner(), "xn--0zwm56d.xn--fiqs8s");
+  /// ```
+  #[inline]
+  pub const fn try_from_ascii_str(input: &'a str) -> Result<Self, ParseAsciiDomainError> {
+    if !input.is_ascii() {
+      return Err(ParseAsciiDomainError(()));
+    }
+
+    match verify_ascii_domain(input.as_bytes()) {
+      Ok(_) => Ok(Self(input)),
+      Err(_) => Err(ParseAsciiDomainError(())),
+    }
+  }
+}
+
+impl<'a> Domain<&'a [u8]> {
+  /// Parses a domain name from `&[u8]`.
+  ///
+  /// Unlike `Domain::try_from_bytes`, this method does not perform any percent decoding
+  /// or punycode decoding. If the input is not ASCII, it will return an error.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Domain;
+  ///
+  /// let domain = Domain::try_from_ascii_bytes(b"example.com").unwrap();
+  /// assert_eq!(domain.into_inner(), b"example.com");
+  ///
+  /// // This will return an error because the domain is not ASCII.
+  /// assert!(Domain::try_from_ascii_bytes("测试.中国".as_bytes()).is_err());
+  ///
+  /// // Thie will not return an error, even though the human-readable domain is not ASCII.
+  /// let domain = Domain::try_from_ascii_bytes(b"xn--0zwm56d.xn--fiqs8s").unwrap();
+  /// assert_eq!(domain.into_inner(), b"xn--0zwm56d.xn--fiqs8s");
+  /// ```
+  #[inline]
+  pub const fn try_from_ascii_bytes(input: &'a [u8]) -> Result<Self, ParseAsciiDomainError> {
+    if !input.is_ascii() {
+      return Err(ParseAsciiDomainError(()));
+    }
+
+    match verify_ascii_domain(input) {
+      Ok(_) => Ok(Self(input)),
+      Err(_) => Err(ParseAsciiDomainError(())),
+    }
   }
 }
 
@@ -265,6 +389,19 @@ const _: () = {
     |d: Domain<&[u8]>| Arc::from(from_utf8(d.0).expect("doamain is ASCII")) => Arc<str>,
   );
   impl_try_from!(@owned try_from_str(as_ref, Arc<str>), try_from_bytes(as_ref, Arc<[u8]>));
+};
+
+#[cfg(feature = "bytes_1")]
+const _: () = {
+  use bytes_1::Bytes;
+
+  impl_try_from!(@str
+    |d: Domain<&str>| Bytes::copy_from_slice(d.0.as_bytes()) => Bytes,
+  );
+  impl_try_from!(@bytes
+    |d: Domain<_>| Bytes::copy_from_slice(d.0) => Bytes,
+  );
+  impl_try_from!(@owned try_from_bytes(as_ref, Bytes));
 };
 
 impl<'a> TryFrom<&'a str> for Domain<Cow<'a, str>> {

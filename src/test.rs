@@ -8,6 +8,9 @@ use smol_str_0_3::SmolStr;
 #[cfg(feature = "triomphe_0_1")]
 use triomphe_0_1::Arc as TriompheArc;
 
+#[cfg(feature = "bytes_1")]
+use bytes_1::Bytes;
+
 static TESTS: &[(&str, bool)] = &[
     ("", false),
     (".", true),
@@ -79,6 +82,7 @@ static TESTS: &[(&str, bool)] = &[
     ("abc@abc.com", false),
     ("测试.com", true),
     ("测试.中国", true),
+    ("测试.中国.", true),
     ("测试@测试.中国", false),
     ("example.123", false),
   ];
@@ -143,6 +147,9 @@ gen_test_validation!(TriompheArcBytes, TriompheArcStr,);
 
 #[cfg(feature = "smol_str_0_3")]
 gen_test_validation!(SmolStr);
+
+#[cfg(feature = "bytes_1")]
+gen_test_validation!(Bytes);
 
 gen_test_validation!(String, RcStr, ArcStr, BoxStr, VecBytes, RcBytes, ArcBytes, BoxBytes,);
 
@@ -215,3 +222,6 @@ gen_quickcheck!(String, RcStr, ArcStr, BoxStr, VecBytes, RcBytes, ArcBytes, BoxB
 
 #[cfg(feature = "smol_str_0_3")]
 gen_quickcheck!(SmolStr,);
+
+#[cfg(feature = "bytes_1")]
+gen_quickcheck!(Bytes,);

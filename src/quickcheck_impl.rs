@@ -68,7 +68,7 @@ macro_rules! impl_arbitrary {
       impl Arbitrary for Host<$ty> {
         fn arbitrary(g: &mut Gen) -> Self {
           if bool::arbitrary(g) {
-            Host::Domain(Arbitrary::arbitrary(g))
+            Host::Domain(<Domain<$ty> as Arbitrary>::arbitrary(g).0)
           } else {
             Host::Ip(Arbitrary::arbitrary(g))
           }
@@ -101,6 +101,11 @@ impl_arbitrary!(
 #[cfg(feature = "smol_str_0_3")]
 impl_arbitrary!(
   smol_str_0_3::SmolStr { |d: Domain<String>| { Domain(d.0.into()) } },
+);
+
+#[cfg(feature = "bytes_1")]
+impl_arbitrary!(
+  bytes_1::Bytes { |d: Domain<String>| { Domain(d.0.into_bytes().into()) } },
 );
 
 #[cfg(feature = "triomphe_0_1")]

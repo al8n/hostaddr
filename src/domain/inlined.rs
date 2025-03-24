@@ -52,6 +52,16 @@ impl_from_domain_buffer!(as_str -> into -> smol_str_0_3::SmolStr);
 impl_from_domain_buffer!(as_str -> into -> triomphe_0_1::Arc<str>);
 #[cfg(feature = "triomphe_0_1")]
 impl_from_domain_buffer!(as_bytes -> into -> triomphe_0_1::Arc<[u8]>);
+#[cfg(feature = "bytes_1")]
+const _: () = {
+  use bytes_1::Bytes;
+
+  impl From<DomainBuffer> for Bytes {
+    fn from(value: DomainBuffer) -> Self {
+      Bytes::copy_from_slice(value.as_bytes())
+    }
+  }
+};
 
 impl_from_domain_buffer!(
   as_str(

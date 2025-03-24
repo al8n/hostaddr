@@ -26,6 +26,24 @@ English | [简体中文][zh-cn-url]
 hostaddr = "0.1"
 ```
 
+## Example
+
+```rust
+use hostaddr::HostAddr;
+
+// parse domain to String
+let addr: HostAddr<String> = "example.com".parse().unwrap();
+
+// parse domain with port to Arc<str>
+let addr: HostAddr<std::sync::Arc<str>> = "example.com:8080".parse().unwrap();
+
+// parse domain to Vec<u8>
+let addr: HostAddr<Vec<u8>> = "example.com".parse().unwrap();
+
+// parse a fully qualified domain name with port to Box<str>
+let addr: HostAddr<Box<str>> = "example.com.:8080".parse().unwrap();
+```
+
 #### License
 
 `hostaddr` is under the terms of both the MIT license and the
