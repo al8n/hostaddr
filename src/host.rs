@@ -211,11 +211,14 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use std::sync::Arc;
+  /// use std::{sync::Arc, net::IpAddr};
   /// use hostaddr::Host;
   ///
   /// let host: Host<Arc<str>> = "example.com".try_into().unwrap();
   /// assert_eq!("example.com", host.as_deref().unwrap_domain());
+  ///
+  /// let host: Host<Arc<str>> = "127.0.0.1".try_into().unwrap();
+  /// assert_eq!("127.0.0.1".parse::<IpAddr>().unwrap(), host.as_deref().unwrap_ip());
   /// ```
   #[inline]
   pub fn as_deref(&self) -> Host<&S::Target>

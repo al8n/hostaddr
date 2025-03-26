@@ -758,11 +758,15 @@ mod tests {
   fn negative_try_from_ascii_bytes() {
     let err = Domain::<&[u8]>::try_from_ascii_bytes("测试.中国".as_bytes()).unwrap_err();
     assert_eq!(err.as_str(), "invalid ASCII domain");
+    let err = Domain::<&[u8]>::try_from_ascii_bytes("@example.com".as_bytes()).unwrap_err();
+    assert_eq!(err.as_str(), "invalid ASCII domain");
   }
 
   #[test]
   fn negative_try_from_ascii_str() {
     let err = Domain::<&str>::try_from_ascii_str("测试.中国").unwrap_err();
+    assert_eq!(err.as_str(), "invalid ASCII domain");
+    let err = Domain::<&str>::try_from_ascii_str("@example.com").unwrap_err();
     assert_eq!(err.as_str(), "invalid ASCII domain");
   }
 }
