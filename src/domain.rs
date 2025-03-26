@@ -560,6 +560,9 @@ const _: () = {
   impl_try_from!(@owned try_from_bytes(as_ref, Bytes));
 };
 
+#[cfg(feature = "cheap-clone")]
+impl<S: cheap_clone::CheapClone> cheap_clone::CheapClone for Domain<S> {}
+
 #[cfg(feature = "tinyvec_1")]
 const _: () = {
   use tinyvec_1::TinyVec;
