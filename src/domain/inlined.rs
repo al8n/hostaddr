@@ -1,7 +1,5 @@
 use core::borrow::Borrow;
 
-use std::{borrow::ToOwned, string::String, vec::Vec};
-
 use simdutf8::basic::from_utf8;
 
 /// An immutable buffer which contains a valid domain.
@@ -83,44 +81,49 @@ const _: () = {
   }
 };
 
-impl_from_domain_buffer!(
-  as_str(
-    into -> String,
-    into -> std::sync::Arc<str>,
-    into -> std::boxed::Box<str>,
-    into -> std::rc::Rc<str>,
-  ),
-  as_bytes(
-    into -> Vec<u8>,
-    into -> std::sync::Arc<[u8]>,
-    into -> std::boxed::Box<[u8]>,
-    into -> std::rc::Rc<[u8]>,
-  ),
-);
+#[cfg(any(feature = "std", feature = "alloc"))]
+const _: () = {
+  use std::{borrow::ToOwned, string::String, vec::Vec};
 
-impl From<Buffer> for std::borrow::Cow<'_, str> {
-  /// ```rust
-  /// use hostaddr::{Buffer, Domain};
-  ///
-  /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
-  /// let str: std::borrow::Cow<'_, str> = domain.into_inner().into();
-  /// ```
-  fn from(value: Buffer) -> Self {
-    std::borrow::Cow::Owned(value.as_str().to_owned())
-  }
-}
+  impl_from_domain_buffer!(
+    as_str(
+      into -> String,
+      into -> std::sync::Arc<str>,
+      into -> std::boxed::Box<str>,
+      into -> std::rc::Rc<str>,
+    ),
+    as_bytes(
+      into -> Vec<u8>,
+      into -> std::sync::Arc<[u8]>,
+      into -> std::boxed::Box<[u8]>,
+      into -> std::rc::Rc<[u8]>,
+    ),
+  );
 
-impl From<Buffer> for std::borrow::Cow<'_, [u8]> {
-  /// ```rust
-  /// use hostaddr::{Buffer, Domain};
-  ///
-  /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
-  /// let bytes: std::borrow::Cow<'_, [u8]> = domain.into_inner().into();
-  /// ```
-  fn from(value: Buffer) -> Self {
-    std::borrow::Cow::Owned(value.as_bytes().to_owned())
+  impl From<Buffer> for std::borrow::Cow<'_, str> {
+    /// ```rust
+    /// use hostaddr::{Buffer, Domain};
+    ///
+    /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
+    /// let str: std::borrow::Cow<'_, str> = domain.into_inner().into();
+    /// ```
+    fn from(value: Buffer) -> Self {
+      std::borrow::Cow::Owned(value.as_str().to_owned())
+    }
   }
-}
+
+  impl From<Buffer> for std::borrow::Cow<'_, [u8]> {
+    /// ```rust
+    /// use hostaddr::{Buffer, Domain};
+    ///
+    /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
+    /// let bytes: std::borrow::Cow<'_, [u8]> = domain.into_inner().into();
+    /// ```
+    fn from(value: Buffer) -> Self {
+      std::borrow::Cow::Owned(value.as_bytes().to_owned())
+    }
+  }
+};
 
 impl<'a> From<&'a Buffer> for &'a str {
   /// ```rust

@@ -866,26 +866,29 @@ mod tests {
 
   #[test]
   fn test_hostaddr_parsing() {
-    let host: HostAddr<String> = "example.com".parse().unwrap();
-    assert_eq!("example.com", host.as_ref().host().unwrap_domain());
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    {
+      let host: HostAddr<String> = "example.com".parse().unwrap();
+      assert_eq!("example.com", host.as_ref().host().unwrap_domain());
 
-    let host: HostAddr<String> = "example.com:8080".parse().unwrap();
-    assert_eq!("example.com", host.as_ref().host().unwrap_domain());
-    assert_eq!(Some(8080), host.port());
+      let host: HostAddr<String> = "example.com:8080".parse().unwrap();
+      assert_eq!("example.com", host.as_ref().host().unwrap_domain());
+      assert_eq!(Some(8080), host.port());
 
-    let host: HostAddr<String> = "127.0.0.1:8080".parse().unwrap();
-    assert_eq!(
-      IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-      host.as_ref().host().unwrap_ip()
-    );
-    assert_eq!(Some(8080), host.port());
+      let host: HostAddr<String> = "127.0.0.1:8080".parse().unwrap();
+      assert_eq!(
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        host.as_ref().host().unwrap_ip()
+      );
+      assert_eq!(Some(8080), host.port());
 
-    let host: HostAddr<String> = "[::1]:8080".parse().unwrap();
-    assert_eq!(
-      IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-      host.as_ref().host().unwrap_ip()
-    );
-    assert_eq!(Some(8080), host.port());
+      let host: HostAddr<String> = "[::1]:8080".parse().unwrap();
+      assert_eq!(
+        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+        host.as_ref().host().unwrap_ip()
+      );
+      assert_eq!(Some(8080), host.port());
+    }
 
     let host: HostAddr<&str> = HostAddr::try_from_ascii_str("[::1]").unwrap();
     assert_eq!(
@@ -912,6 +915,7 @@ mod tests {
     );
   }
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn test_hostaddr_try_into() {
     let host: HostAddr<String> = "example.com".try_into().unwrap();

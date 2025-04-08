@@ -395,14 +395,17 @@ impl ParseHostError {
 #[cfg(test)]
 mod tests {
   use super::*;
+  #[cfg(any(feature = "std", feature = "alloc"))]
   use std::string::String;
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn negative_from_str() {
     let err = "@a".parse::<Host<String>>().unwrap_err();
     assert_eq!(err.as_str(), "invalid host");
   }
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn negative_try_from_str() {
     let err = Host::<String>::try_from("@a").unwrap_err();
