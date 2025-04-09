@@ -1,5 +1,7 @@
+#[cfg(any(feature = "std", feature = "alloc"))]
 use either::Either;
 use memchr::Memchr;
+#[cfg(any(feature = "std", feature = "alloc"))]
 use simdutf8::basic::from_utf8;
 
 use core::borrow::Borrow;
@@ -52,6 +54,8 @@ impl ParseAsciiDomainError {
 /// ## Example
 ///
 /// ```rust
+/// # #[cfg(any(feature = "alloc", feature = "std"))]
+/// # {
 /// use std::{sync::Arc, str::FromStr};
 ///
 /// use hostaddr::Domain;
@@ -67,6 +71,7 @@ impl ParseAsciiDomainError {
 ///
 /// let domain = Domain::<Arc<[u8]>>::try_from("test.com".as_bytes()).unwrap();
 /// assert_eq!(domain.as_inner().as_ref(), b"test.com");
+/// # }
 /// ```
 #[derive(
   Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display, derive_more::AsRef,
@@ -165,10 +170,13 @@ impl<S> Domain<&S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Domain, Buffer};
   ///
   /// let domain: Domain<Buffer> = Domain::try_from("example.com").unwrap();
   /// assert_eq!("example.com", domain.as_ref().copied().as_inner().as_str());
+  /// # }
   /// ```
   #[inline]
   pub const fn copied(self) -> Domain<S>
@@ -184,10 +192,13 @@ impl<S> Domain<&S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Domain;
   ///
   /// let domain: Domain<String> = "example.com".parse().unwrap();
   /// assert_eq!("example.com", domain.as_ref().cloned().as_inner().as_str());
+  /// # }
   /// ```
   #[inline]
   pub fn cloned(self) -> Domain<S>
@@ -266,6 +277,24 @@ impl<'a> Domain<&'a [u8]> {
   }
 }
 
+// The `Buffer` cannot constructed outside of this crate
+// the only way to create a `Buffer` is to use the `Domain` struct
+// So we can have a `impl From<Buffer> for Domain<Buffer>` and
+// `impl From<Domain<Buffer>> for Buffer`
+
+impl From<Buffer> for Domain<Buffer> {
+  fn from(value: Buffer) -> Self {
+    Domain(value)
+  }
+}
+
+impl From<Domain<Buffer>> for Buffer {
+  fn from(value: Domain<Buffer>) -> Self {
+    value.0
+  }
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
 macro_rules! impl_try_from {
   (@str $($from:expr => $ty:ty), +$(,)?) => {
     $(
@@ -688,6 +717,112 @@ const _: () = {
   );
   impl_try_from!(@owned_const_n try_from_bytes(as_ref, SmallVec<[u8; N]>));
 };
+
+/// Verifies that the input is a valid domain name.
+///
+/// See also [`verify_ascii_domain`] and [`verify_ascii_domain_allow_percent_encoding`].
+///
+/// ## Example
+///
+/// ```rust
+/// use hostaddr::verify_domain;
+///
+/// let domain = b"example.com";
+/// assert!(verify_domain(domain).is_ok());
+///
+/// let domain = b"xn--e1afmkfd.xn--80akhbyknj4f";
+/// assert!(verify_domain(domain).is_ok());
+///
+/// let domain = "测试.中国";
+/// assert!(verify_domain(domain.as_bytes()).is_ok());
+///
+/// let domain = "测试%2E中国";
+/// assert!(verify_domain(domain.as_bytes()).is_ok());
+/// ```
+#[cfg(any(feature = "alloc", feature = "std"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
+pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
+  use idna::{
+    uts46::{ErrorPolicy, Hyphens, Uts46},
+    AsciiDenyList,
+  };
+
+  #[derive(Default)]
+  struct Eat {
+    len: usize,
+    last: u8,
+  }
+
+  impl core::fmt::Write for Eat {
+    fn write_str(&mut self, val: &str) -> core::fmt::Result {
+      self.len += val.len();
+      if let Some(last) = val.as_bytes().last() {
+        self.last = *last;
+      }
+      Ok(())
+    }
+  }
+
+  fn domain_to_ascii(domain: &[u8], sinker: &mut Eat) -> Result<(), ParseDomainError> {
+    let uts46 = Uts46::new();
+    let result = uts46.process(
+      domain,
+      AsciiDenyList::URL,
+      Hyphens::Allow,
+      ErrorPolicy::FailFast,
+      |_, _, _| false, // Force ToASCII processing
+      sinker,
+      None,
+    );
+    match result {
+      Ok(_) => Ok(()),
+      Err(_) => Err(ParseDomainError(())),
+    }
+  }
+
+  macro_rules! validate_length {
+    ($eat:ident) => {{
+      if $eat.len > 0 {
+        if $eat.last == b'.' {
+          if $eat.len > 254 {
+            return Err(ParseDomainError(()));
+          }
+        } else if $eat.len > 253 {
+          return Err(ParseDomainError(()));
+        }
+      }
+    }};
+  }
+
+  let domain = input;
+  // We have percent encoded bytes, so we need to decode them.
+  if Memchr::new(b'%', domain).next().is_some() {
+    let input = percent_encoding::percent_decode(domain);
+    let mut domain_buf = Buffer::new();
+    for byte in input {
+      domain_buf.push(byte).map_err(|_| ParseDomainError(()))?;
+    }
+
+    let input = domain_buf.as_bytes();
+    if input.is_ascii() {
+      return verify_ascii_domain(input).map_err(|_| ParseDomainError(()));
+    }
+
+    let mut eat = Eat::default();
+    domain_to_ascii(input, &mut eat)?;
+    validate_length!(eat);
+    return Ok(());
+  }
+
+  if domain.is_ascii() {
+    return verify_ascii_domain(domain).map_err(|_| ParseDomainError(()));
+  }
+
+  let mut eat = Eat::default();
+  domain_to_ascii(domain, &mut eat)?;
+  validate_length!(eat);
+  Ok(())
+}
 
 /// Verifies that the input is a valid ASCII domain name. The input
 /// can be a percent-encoded domain name.

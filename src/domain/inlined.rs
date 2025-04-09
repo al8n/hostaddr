@@ -25,6 +25,7 @@ impl Ord for Buffer {
   }
 }
 
+#[cfg(any(feature = "std", feature = "alloc"))]
 macro_rules! impl_from_domain_buffer {
   ($($as:ident(
     $($into:ident -> $ty:ty), +$(,)?
@@ -74,7 +75,7 @@ const _: () = {
 const _: () = {
   use smallvec_1::SmallVec;
 
-  impl<A: smallvec_1::Array<Item = u8>> From<Buffer> for SmallVec<A> {
+  impl<const N: usize> From<Buffer> for SmallVec<[u8; N]> {
     fn from(value: Buffer) -> Self {
       SmallVec::from_slice(value.as_bytes())
     }
@@ -127,10 +128,13 @@ const _: () = {
 
 impl<'a> From<&'a Buffer> for &'a str {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Buffer, Domain};
   ///
   /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
   /// let str: &str = (&domain.into_inner()).into();
+  /// # }
   /// ```
   fn from(value: &'a Buffer) -> Self {
     value.as_str()
@@ -139,10 +143,13 @@ impl<'a> From<&'a Buffer> for &'a str {
 
 impl<'a> From<&'a Buffer> for &'a [u8] {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Buffer, Domain};
   ///
   /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
   /// let bytes: &[u8] = (&domain.into_inner()).into();
+  /// # }
   /// ```
   fn from(value: &'a Buffer) -> Self {
     value.as_bytes()
@@ -151,11 +158,14 @@ impl<'a> From<&'a Buffer> for &'a [u8] {
 
 impl Borrow<str> for Buffer {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Buffer, Domain};
   /// use std::borrow::Borrow;
   ///
   /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
   /// let str: &str = domain.into_inner().borrow();
+  /// # }
   /// ```
   #[inline]
   fn borrow(&self) -> &str {
@@ -165,10 +175,13 @@ impl Borrow<str> for Buffer {
 
 impl AsRef<[u8]> for Buffer {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Buffer, Domain};
   ///
   /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
   /// let bytes: &[u8] = domain.into_inner().as_ref();
+  /// # }
   /// ```
   fn as_ref(&self) -> &[u8] {
     self.as_bytes()
@@ -177,10 +190,13 @@ impl AsRef<[u8]> for Buffer {
 
 impl AsRef<str> for Buffer {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Buffer, Domain};
   ///
   /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
   /// let str: &str = domain.into_inner().as_ref();
+  /// # }
   /// ```
   fn as_ref(&self) -> &str {
     self.as_str()
@@ -204,10 +220,13 @@ impl Buffer {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Buffer, Domain};
   ///
   /// let domain: Domain<Buffer> = "example.com".parse().unwrap();
   /// assert_eq!("example.com", domain.into_inner().const_as_str());
+  /// # }
   /// ```
   #[inline]
   pub const fn const_as_str(&self) -> &str {
@@ -241,6 +260,7 @@ impl Buffer {
     *self.buf.last().unwrap() as usize
   }
 
+  #[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
   #[inline]
   pub(super) fn copy_from_slice(slice: &[u8]) -> Self {
     let len = slice.len();
@@ -252,6 +272,7 @@ impl Buffer {
     buf
   }
 
+  #[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
   #[inline]
   pub(super) fn copy_from_str(s: &str) -> Self {
     Self::copy_from_slice(s.as_bytes())
@@ -331,10 +352,11 @@ const _: () = {
 
 #[cfg(test)]
 mod test {
-  use super::*;
-
+  #[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
   #[test]
   fn test_ord() {
+    use super::*;
+
     let a = Buffer::copy_from_str("a");
     let b = Buffer::copy_from_str("b");
     assert!(a < b);

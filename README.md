@@ -28,7 +28,7 @@ hostaddr = "0.1"
 
 ## Example
 
-```rust
+```rust,ignore
 use hostaddr::HostAddr;
 
 // parse domain to String
