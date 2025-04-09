@@ -78,9 +78,9 @@ impl ParseAsciiDomainError {
 #[repr(transparent)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
-pub struct Domain<S>(pub(super) S);
+pub struct Domain<S: ?Sized>(pub(super) S);
 
-impl<S> Domain<S> {
+impl<S: ?Sized> Domain<S> {
   /// Returns the reference to the inner `S`.
   #[inline]
   pub const fn as_inner(&self) -> &S {
@@ -89,7 +89,10 @@ impl<S> Domain<S> {
 
   /// Returns the inner `S`.
   #[inline]
-  pub fn into_inner(self) -> S {
+  pub fn into_inner(self) -> S
+  where
+    S: Sized,
+  {
     self.0
   }
 
@@ -109,13 +112,13 @@ impl<S> Domain<S> {
   }
 }
 
-impl<S> Borrow<S> for Domain<S> {
+impl<S: ?Sized> Borrow<S> for Domain<S> {
   /// ```rust
   /// use hostaddr::Domain;
   /// use std::borrow::Borrow;
   ///
-  /// let domain: Domain<&[u8]> = Domain::try_from_ascii_bytes(b"example.com").unwrap();
-  /// let bytes: &&[u8] = domain.borrow();
+  /// let domain = Domain::<[u8]>::try_from_ascii_bytes(b"example.com").unwrap();
+  /// let bytes: &[u8] = domain.borrow();
   ///
   /// assert_eq!(bytes, b"example.com");
   /// ```
@@ -132,7 +135,7 @@ where
   /// ```rust
   /// use hostaddr::Domain;
   ///
-  /// let domain: Domain<&str> = Domain::try_from_ascii_str("example.com").unwrap();
+  /// let domain = Domain::<str>::try_from_ascii_str("example.com").unwrap();
   /// let s: &str = AsRef::as_ref(&domain);
   ///
   /// assert_eq!(s, "example.com");
@@ -151,7 +154,7 @@ where
   /// use hostaddr::Domain;
   /// use std::borrow::Borrow;
   ///
-  /// let domain: Domain<&[u8]> = Domain::try_from_ascii_bytes(b"example.com").unwrap();
+  /// let domain = Domain::<[u8]>::try_from_ascii_bytes(b"example.com").unwrap();
   /// let bytes: &[u8] = AsRef::as_ref(&domain);
   ///
   /// assert_eq!(bytes, b"example.com");
@@ -208,7 +211,34 @@ impl<S> Domain<&S> {
   }
 }
 
-impl<'a> Domain<&'a str> {
+impl<S: ?Sized> Domain<S> {
+  /// Creates a reference to a `Domain<S>` from a reference to `S`.
+  #[inline]
+  const fn ref_cast(s: &S) -> &Domain<S> {
+    // # SAFETY
+    // This transmutation is safe because:
+    //
+    // 1. `Domain<S>` is marked with `#[repr(transparent)]`, which guarantees
+    //    that it has the exact same memory layout as its single non-zero-sized field `S`.
+    //    This applies to both sized and unsized (`?Sized`) types.
+    //
+    // 2. For sized types, both references are single pointers with identical alignment
+    //    and size requirements.
+    //
+    // 3. For unsized types (like `str` or `[T]`), both references are fat pointers
+    //    containing the same metadata (e.g., length for slices/str). The transparency
+    //    guarantee ensures that the metadata is interpreted identically.
+    //
+    // 4. We're preserving the original lifetime of the reference, so no lifetime
+    //    extension occurs that could lead to dangling references.
+    //
+    // 5. No field access or method calls happen during this conversion that could
+    //    violate type invariants.
+    unsafe { &*(s as *const S as *const Domain<S>) }
+  }
+}
+
+impl Domain<str> {
   /// Parses a domain name from `&str`.
   ///
   /// Unlike `Domain::try_from_str`, this method does not perform any percent decoding
@@ -220,23 +250,23 @@ impl<'a> Domain<&'a str> {
   /// use hostaddr::Domain;
   ///
   /// let domain = Domain::try_from_ascii_str("example.com").unwrap();
-  /// assert_eq!(domain.into_inner(), "example.com");
+  /// assert_eq!(domain.as_ref().into_inner(), "example.com");
   ///
   /// // This will return an error because the domain is not ASCII.
   /// assert!(Domain::try_from_ascii_str("测试.中国").is_err());
   ///
   /// // Thie will not return an error, even though the human-readable domain is not ASCII.
   /// let domain = Domain::try_from_ascii_str("xn--0zwm56d.xn--fiqs8s").unwrap();
-  /// assert_eq!(domain.into_inner(), "xn--0zwm56d.xn--fiqs8s");
+  /// assert_eq!(domain.as_ref().into_inner(), "xn--0zwm56d.xn--fiqs8s");
   /// ```
   #[inline]
-  pub const fn try_from_ascii_str(input: &'a str) -> Result<Self, ParseAsciiDomainError> {
+  pub const fn try_from_ascii_str(input: &str) -> Result<&Self, ParseAsciiDomainError> {
     if !input.is_ascii() {
       return Err(ParseAsciiDomainError(()));
     }
 
     match verify_ascii_domain(input.as_bytes()) {
-      Ok(_) => Ok(Self(input)),
+      Ok(_) => Ok(Self::ref_cast(input)),
       Err(_) => Err(ParseAsciiDomainError(())),
     }
   }
@@ -249,15 +279,15 @@ impl<'a> Domain<&'a str> {
   /// use hostaddr::Domain;
   ///
   /// let domain = Domain::try_from_ascii_str("example.com").unwrap();
-  /// assert_eq!(domain.as_bytes().into_inner(), b"example.com");
+  /// assert_eq!(domain.as_bytes().as_ref().into_inner(), b"example.com");
   /// ```
   #[inline]
-  pub const fn as_bytes(&self) -> Domain<&'a [u8]> {
-    Domain(self.0.as_bytes())
+  pub const fn as_bytes(&self) -> &Domain<[u8]> {
+    Domain::<[u8]>::ref_cast(self.0.as_bytes())
   }
 }
 
-impl<'a> Domain<&'a [u8]> {
+impl Domain<[u8]> {
   /// Parses a domain name from `&[u8]`.
   ///
   /// Unlike `Domain::try_from_bytes`, this method does not perform any percent decoding
@@ -269,28 +299,28 @@ impl<'a> Domain<&'a [u8]> {
   /// use hostaddr::Domain;
   ///
   /// let domain = Domain::try_from_ascii_bytes(b"example.com").unwrap();
-  /// assert_eq!(domain.into_inner(), b"example.com");
+  /// assert_eq!(domain.as_ref().into_inner(), b"example.com");
   ///
   /// // This will return an error because the domain is not ASCII.
   /// assert!(Domain::try_from_ascii_bytes("测试.中国".as_bytes()).is_err());
   ///
   /// // Thie will not return an error, even though the human-readable domain is not ASCII.
   /// let domain = Domain::try_from_ascii_bytes(b"xn--0zwm56d.xn--fiqs8s").unwrap();
-  /// assert_eq!(domain.into_inner(), b"xn--0zwm56d.xn--fiqs8s");
+  /// assert_eq!(domain.as_ref().into_inner(), b"xn--0zwm56d.xn--fiqs8s");
   /// ```
   #[inline]
-  pub const fn try_from_ascii_bytes(input: &'a [u8]) -> Result<Self, ParseAsciiDomainError> {
+  pub const fn try_from_ascii_bytes(input: &[u8]) -> Result<&Self, ParseAsciiDomainError> {
     if !input.is_ascii() {
       return Err(ParseAsciiDomainError(()));
     }
 
     match verify_ascii_domain(input) {
-      Ok(_) => Ok(Self(input)),
+      Ok(_) => Ok(Self::ref_cast(input)),
       Err(_) => Err(ParseAsciiDomainError(())),
     }
   }
 
-  /// Converts the domain to a `Domain<&'a str>`.
+  /// Converts the domain to a `Domain<str>`.
   ///
   /// ## Example
   ///
@@ -298,13 +328,13 @@ impl<'a> Domain<&'a [u8]> {
   /// use hostaddr::Domain;
   ///
   /// let domain = Domain::try_from_ascii_bytes(b"example.com").unwrap();
-  /// assert_eq!(domain.as_str().into_inner(), "example.com");
+  /// assert_eq!(domain.as_str().as_ref().into_inner(), "example.com");
   /// ```
   #[inline]
-  pub const fn as_str(&self) -> Domain<&'a str> {
-    match core::str::from_utf8(self.0) {
-      Ok(s) => Domain(s),
-      Err(_) => panic!("A Domain<&[u8]> should always be valid UTF-8"),
+  pub const fn as_str(&self) -> &Domain<str> {
+    match core::str::from_utf8(&self.0) {
+      Ok(s) => Domain::<str>::ref_cast(s),
+      Err(_) => panic!("A Domain<[u8]> should always be valid UTF-8"),
     }
   }
 }
@@ -323,6 +353,58 @@ impl From<Buffer> for Domain<Buffer> {
 impl From<Domain<Buffer>> for Buffer {
   fn from(value: Domain<Buffer>) -> Self {
     value.0
+  }
+}
+
+impl From<Domain<&str>> for Domain<Buffer> {
+  /// ```rust
+  /// use hostaddr::{Domain, Buffer};
+  ///
+  /// let domain: Domain<Buffer> = Domain::try_from_ascii_str("example.com").unwrap().as_ref().into();
+  /// let buffer: Buffer = domain.into();
+  /// assert_eq!(buffer.as_str(), "example.com");
+  ///
+  /// let domain: Domain<Buffer> = buffer.into();
+  /// assert_eq!(domain.into_inner().as_str(), "example.com");
+  /// ```
+  fn from(value: Domain<&str>) -> Self {
+    Domain(Buffer::copy_from_str(value.0))
+  }
+}
+
+impl From<Domain<&[u8]>> for Domain<Buffer> {
+  /// ```rust
+  /// use hostaddr::{Domain, Buffer};
+  ///
+  /// let domain: Domain<Buffer> = Domain::try_from_ascii_bytes(b"example.com").unwrap().as_ref().into();
+  /// assert_eq!(domain.into_inner().as_str(), "example.com");
+  /// ```
+  fn from(value: Domain<&[u8]>) -> Self {
+    Domain(Buffer::copy_from_slice(value.0))
+  }
+}
+
+impl From<&Domain<str>> for Domain<Buffer> {
+  /// ```rust
+  /// use hostaddr::{Domain, Buffer};
+  ///
+  /// let domain: Domain<Buffer> = Domain::try_from_ascii_str("example.com").unwrap().into();
+  /// assert_eq!(domain.into_inner().as_str(), "example.com");
+  /// ```
+  fn from(value: &Domain<str>) -> Self {
+    Domain(Buffer::copy_from_str(&value.0))
+  }
+}
+
+impl From<&Domain<[u8]>> for Domain<Buffer> {
+  /// ```rust
+  /// use hostaddr::{Domain, Buffer};
+  ///
+  /// let domain: Domain<Buffer> = Domain::try_from_ascii_bytes(b"example.com").unwrap().into();
+  /// assert_eq!(domain.into_inner().as_bytes(), b"example.com");
+  /// ```
+  fn from(value: &Domain<[u8]>) -> Self {
+    Domain(Buffer::copy_from_slice(&value.0))
   }
 }
 
@@ -996,17 +1078,17 @@ mod tests {
 
   #[test]
   fn negative_try_from_ascii_bytes() {
-    let err = Domain::<&[u8]>::try_from_ascii_bytes("测试.中国".as_bytes()).unwrap_err();
+    let err = Domain::<[u8]>::try_from_ascii_bytes("测试.中国".as_bytes()).unwrap_err();
     assert_eq!(err.as_str(), "invalid ASCII domain");
-    let err = Domain::<&[u8]>::try_from_ascii_bytes("@example.com".as_bytes()).unwrap_err();
+    let err = Domain::<[u8]>::try_from_ascii_bytes("@example.com".as_bytes()).unwrap_err();
     assert_eq!(err.as_str(), "invalid ASCII domain");
   }
 
   #[test]
   fn negative_try_from_ascii_str() {
-    let err = Domain::<&str>::try_from_ascii_str("测试.中国").unwrap_err();
+    let err = Domain::<str>::try_from_ascii_str("测试.中国").unwrap_err();
     assert_eq!(err.as_str(), "invalid ASCII domain");
-    let err = Domain::<&str>::try_from_ascii_str("@example.com").unwrap_err();
+    let err = Domain::<str>::try_from_ascii_str("@example.com").unwrap_err();
     assert_eq!(err.as_str(), "invalid ASCII domain");
   }
 }

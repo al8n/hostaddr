@@ -1,11 +1,11 @@
 [package]
 name = "hostaddr"
-version = "0.1.3"
+version = "0.1.7"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
 homepage = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
-description = "Extended types for working with net in Rust."
+description = "Extended types (`Domain`, `Host`, `HostAddr`) for working with net in Rust."
 license = "MIT OR Apache-2.0"
 rust-version = "1.81"
 categories = ["network-programming", "data-structures", "no-std", "no-std::no-alloc"]
@@ -41,6 +41,7 @@ triomphe = ["triomphe_0_1"]
 bytes_1 = ["dep:bytes_1", "cheap-clone?/bytes_1"]
 bytes = ["bytes_1"]
 tinyvec = ["tinyvec_1"]
+smallvec_1 = ["dep:smallvec_1"]
 smallvec = ["smallvec_1"]
 
 serde = [

@@ -71,7 +71,7 @@ const _: () = {
     }
   }
 };
-#[cfg(feature = "smallvec")]
+#[cfg(feature = "smallvec_1")]
 const _: () = {
   use smallvec_1::SmallVec;
 
@@ -260,7 +260,6 @@ impl Buffer {
     *self.buf.last().unwrap() as usize
   }
 
-  #[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
   #[inline]
   pub(super) fn copy_from_slice(slice: &[u8]) -> Self {
     let len = slice.len();
@@ -272,7 +271,6 @@ impl Buffer {
     buf
   }
 
-  #[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
   #[inline]
   pub(super) fn copy_from_str(s: &str) -> Self {
     Self::copy_from_slice(s.as_bytes())

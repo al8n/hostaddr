@@ -25,10 +25,10 @@ use super::Domain;
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[unwrap(ref, ref_mut)]
 pub enum Host<S> {
-  /// A DNS domain name
-  Domain(S),
   /// An IP address
   Ip(IpAddr),
+  /// A DNS domain name
+  Domain(S),
 }
 
 #[cfg(feature = "cheap-clone")]
@@ -62,7 +62,7 @@ impl<'a> Host<&'a str> {
     }
 
     Domain::try_from_ascii_str(input)
-      .map(|d| Host::Domain(d.0))
+      .map(|d| Host::Domain(d.as_ref().0))
       .map_err(|_| ParseAsciiHostError(()))
   }
 
@@ -117,7 +117,7 @@ impl<'a> Host<&'a [u8]> {
     }
 
     Domain::try_from_ascii_bytes(input)
-      .map(|d| Host::Domain(d.0))
+      .map(|d| Host::Domain(d.as_ref().0))
       .map_err(|_| ParseAsciiHostError(()))
   }
 
