@@ -832,22 +832,22 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
 /// This function cannot be used to verify non-ASCII domain names.
 ///
 /// Note: This function cannot verify domain name contains unicode characters.
-/// 
-/// 
+///
+///
 /// ## Example
-/// 
+///
 /// ```rust
 /// use hostaddr::verify_ascii_domain_allow_percent_encoding;
-/// 
+///
 /// let domain = b"example.com";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain).is_ok());
 ///
 /// let domain = b"example%2Ecom";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain).is_ok());
-/// 
+///
 /// let domain = b"xn--e1afmkfd.xn--80akhbyknj4f";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain).is_ok());
-/// 
+///
 /// // Thie fn cannot verify domain name contains unicode characters.
 /// let domain = "测试.中国";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain.as_bytes()).is_err());
