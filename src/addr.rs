@@ -876,6 +876,24 @@ impl<'a> HostAddr<&'a str> {
       }
     }
   }
+
+  /// Converts the domain to a `HostAddr<&'a [u8]>`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::HostAddr;
+  ///
+  /// let addr = HostAddr::try_from_ascii_str("example.com").unwrap();
+  /// assert_eq!(addr.as_bytes().unwrap_domain().0, b"example.com");
+  /// ```
+  #[inline]
+  pub const fn as_bytes(&self) -> HostAddr<&'a [u8]> {
+    HostAddr {
+      host: self.host.as_bytes(),
+      port: self.port,
+    }
+  }
 }
 
 impl<'a> HostAddr<&'a [u8]> {
@@ -924,6 +942,24 @@ impl<'a> HostAddr<&'a [u8]> {
 
         Ok(Self { host, port })
       }
+    }
+  }
+
+  /// Converts the domain to a `HostAddr<&'a str>`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::HostAddr;
+  ///
+  /// let addr = HostAddr::try_from_ascii_bytes(b"example.com").unwrap();
+  /// assert_eq!(addr.as_str().unwrap_domain().0, "example.com");
+  /// ```
+  #[inline]
+  pub const fn as_str(&self) -> HostAddr<&'a str> {
+    HostAddr {
+      host: self.host.as_str(),
+      port: self.port,
     }
   }
 }
