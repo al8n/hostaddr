@@ -1,7 +1,6 @@
-#[cfg(any(feature = "std", feature = "alloc"))]
-use either::Either;
 use memchr::Memchr;
-#[cfg(any(feature = "std", feature = "alloc"))]
+
+#[cfg(any(feature = "alloc", feature = "std"))]
 use simdutf8::basic::from_utf8;
 
 use core::borrow::Borrow;
@@ -294,7 +293,7 @@ impl From<Domain<Buffer>> for Buffer {
   }
 }
 
-#[cfg(any(feature = "std", feature = "alloc"))]
+#[allow(unused)]
 macro_rules! impl_try_from {
   (@str $($from:expr => $ty:ty), +$(,)?) => {
     $(
@@ -323,8 +322,8 @@ macro_rules! impl_try_from {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
       Domain::try_from_str(s).map(|res| match res {
-        Either::Left(d) => Self($from(d)),
-        Either::Right(d) => Self(d.into()),
+        either::Either::Left(d) => Self($from(d)),
+        either::Either::Right(d) => Self(d.into()),
       })
     }
   };
@@ -355,8 +354,8 @@ macro_rules! impl_try_from {
 
       fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         Domain::try_from_bytes(value).map(|res| match res {
-          Either::Left(d) => Self(($from)(d)),
-          Either::Right(d) => Self(d.into()),
+          either::Either::Left(d) => Self(($from)(d)),
+          either::Either::Right(d) => Self(d.into()),
         })
       }
     )*
@@ -388,8 +387,8 @@ macro_rules! impl_try_from {
 
     fn try_from(value: $ty) -> Result<Self, Self::Error> {
       Ok(match Domain::$try_from(value.$as())? {
-        Either::Left(_) => Self(value.clone()),
-        Either::Right(d) => Self(d.into()),
+        either::Either::Left(_) => Self(value.clone()),
+        either::Either::Right(d) => Self(d.into()),
       })
     }
   };
@@ -398,8 +397,8 @@ macro_rules! impl_try_from {
 
     fn try_from(value: &'a $ty) -> Result<Self, Self::Error> {
       Ok(match Domain::$try_from(value.$as())? {
-        Either::Left(_) => Self(value.clone()),
-        Either::Right(d) => Self(d.into()),
+        either::Either::Left(_) => Self(value.clone()),
+        either::Either::Right(d) => Self(d.into()),
       })
     }
   };
@@ -453,7 +452,7 @@ const _: () = {
     /// ```
     #[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
     #[inline]
-    pub fn try_from_bytes(input: S) -> Result<Either<Self, Buffer>, ParseDomainError>
+    pub fn try_from_bytes(input: S) -> Result<either::Either<Self, Buffer>, ParseDomainError>
     where
       S: AsRef<[u8]>,
     {
@@ -477,35 +476,35 @@ const _: () = {
         let input = domain_buf.as_bytes();
         if input.is_ascii() {
           return verify_ascii_domain(input)
-            .map(|_| Either::Right(domain_buf))
+            .map(|_| either::Either::Right(domain_buf))
             .map_err(|_| ParseDomainError(()));
         }
 
         let mut sinker = Buffer::new();
         let buf = match domain_to_ascii(input, &mut sinker)? {
-          Either::Left(_) => domain_buf,
-          Either::Right(_) => sinker,
+          either::Either::Left(_) => domain_buf,
+          either::Either::Right(_) => sinker,
         };
 
         validate_length!(buf.as_str());
-        return Ok(Either::Right(buf));
+        return Ok(either::Either::Right(buf));
       }
 
       if domain.is_ascii() {
         return verify_ascii_domain(domain)
-          .map(|_| Either::Left(Self(input)))
+          .map(|_| either::Either::Left(Self(input)))
           .map_err(|_| ParseDomainError(()));
       }
 
       let mut sinker = Buffer::new();
       Ok(match domain_to_ascii(domain, &mut sinker)? {
-        Either::Left(_) => {
+        either::Either::Left(_) => {
           validate_length!(from_utf8(domain).map_err(|_| ParseDomainError(()))?);
-          Either::Left(Self(input))
+          either::Either::Left(Self(input))
         }
-        Either::Right(_) => {
+        either::Either::Right(_) => {
           validate_length!(sinker.as_str());
-          Either::Right(sinker)
+          either::Either::Right(sinker)
         }
       })
     }
@@ -544,15 +543,15 @@ const _: () = {
     /// ```
     #[inline]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
-    pub fn try_from_str(input: S) -> Result<Either<Self, Buffer>, ParseDomainError>
+    pub fn try_from_str(input: S) -> Result<either::Either<Self, Buffer>, ParseDomainError>
     where
       S: AsRef<str>,
     {
       let domain = input.as_ref();
       Ok(
         match Domain::try_from_bytes(domain.as_bytes()).map_err(|_| ParseDomainError(()))? {
-          Either::Left(_) => Either::Left(Self(input)),
-          Either::Right(d) => Either::Right(d),
+          either::Either::Left(_) => either::Either::Left(Self(input)),
+          either::Either::Right(d) => either::Either::Right(d),
         },
       )
     }
@@ -563,8 +562,8 @@ const _: () = {
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
       Domain::try_from_str(value).map(|res| match res {
-        Either::Left(d) => Self(Cow::Borrowed(d.0)),
-        Either::Right(d) => Self(d.into()),
+        either::Either::Left(d) => Self(Cow::Borrowed(d.0)),
+        either::Either::Right(d) => Self(d.into()),
       })
     }
   }
@@ -574,8 +573,8 @@ const _: () = {
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
       Domain::try_from_bytes(value).map(|res| match res {
-        Either::Left(d) => Self(Cow::Borrowed(d.0)),
-        Either::Right(d) => Self(d.into()),
+        either::Either::Left(d) => Self(Cow::Borrowed(d.0)),
+        either::Either::Right(d) => Self(d.into()),
       })
     }
   }
@@ -620,7 +619,10 @@ const _: () = {
     |d: Domain<&[u8]>| Buffer::copy_from_slice(d.0) => Buffer,
   );
 
-  fn domain_to_ascii<S>(domain: &[u8], mut sinker: S) -> Result<Either<&str, S>, ParseDomainError>
+  fn domain_to_ascii<S>(
+    domain: &[u8],
+    mut sinker: S,
+  ) -> Result<either::Either<&str, S>, ParseDomainError>
   where
     S: core::fmt::Write,
   {
@@ -636,9 +638,9 @@ const _: () = {
     );
     Ok(match result {
       Ok(res) => match res {
-        ProcessingSuccess::WroteToSink => Either::Right(sinker),
+        ProcessingSuccess::WroteToSink => either::Either::Right(sinker),
         ProcessingSuccess::Passthrough => {
-          Either::Left(from_utf8(domain).map_err(|_| ParseDomainError(()))?)
+          either::Either::Left(from_utf8(domain).map_err(|_| ParseDomainError(()))?)
         }
       },
       Err(_) => return Err(ParseDomainError(())),

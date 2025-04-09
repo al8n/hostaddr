@@ -193,7 +193,7 @@ fn test_basic() {
   let name = Domain::try_from(&"localhost".to_string()).unwrap();
   assert_eq!("localhost", name.as_deref().into_inner());
   assert_eq!("localhost", *name.as_deref().as_inner());
-  
+
   #[cfg(feature = "std")]
   {
     let err = ParseDomainError(());
