@@ -1,5 +1,7 @@
 use quickcheck::{Arbitrary, Gen};
 
+use std::{string::String, vec::Vec};
+
 use super::{Domain, Host, HostAddr};
 
 fn arbitrary_helper(g: &mut Gen) -> Domain<String> {
@@ -12,7 +14,7 @@ fn arbitrary_helper(g: &mut Gen) -> Domain<String> {
     }
 
     let len = (usize::arbitrary(g) % 63) + 1;
-    let chars: String = std::iter::from_fn(|| {
+    let chars: String = core::iter::from_fn(|| {
       let r = usize::arbitrary(g) % 64;
       Some(match r {
         0..=25 => (b'a' + (r as u8)) as char,

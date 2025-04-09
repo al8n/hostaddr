@@ -988,6 +988,8 @@ mod tests {
   fn test_hostaddr_parsing() {
     #[cfg(any(feature = "std", feature = "alloc"))]
     {
+      use std::string::String;
+
       let host: HostAddr<String> = "example.com".parse().unwrap();
       assert_eq!("example.com", host.as_ref().host().unwrap_domain());
 
@@ -1038,6 +1040,8 @@ mod tests {
   #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn test_hostaddr_try_into() {
+    use std::string::String;
+
     let host: HostAddr<String> = "example.com".try_into().unwrap();
     assert_eq!("example.com", host.as_ref().host().unwrap_domain());
 

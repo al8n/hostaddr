@@ -1,5 +1,7 @@
 use arbitrary::{Arbitrary, Result, Unstructured};
 
+use std::{string::String, vec::Vec};
+
 use super::{Domain, Host, HostAddr};
 
 fn arbitrary_helper(u: &mut Unstructured<'_>) -> Result<Domain<String>> {
