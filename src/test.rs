@@ -1,6 +1,13 @@
 use super::*;
 
-use std::{borrow::Cow, boxed::Box, rc::Rc, sync::Arc};
+use std::{
+  borrow::Cow,
+  boxed::Box,
+  rc::Rc,
+  string::{String, ToString},
+  sync::Arc,
+  vec::Vec,
+};
 
 #[cfg(feature = "smol_str_0_3")]
 use smol_str_0_3::SmolStr;
@@ -98,8 +105,8 @@ where
   Domain<S>: TryFrom<&'a str>,
 {
   for (input, expected) in TESTS {
-    #[cfg(any(feature = "std", feature = "alloc"))]
-    println!("test: {:?} expected valid? {:?}", input, expected);
+    #[cfg(feature = "std")]
+    std::println!("test: {:?} expected valid? {:?}", input, expected);
     let name = Domain::<S>::try_from(input);
     assert_eq!(*expected, name.is_ok());
   }
@@ -110,8 +117,8 @@ where
   Domain<S>: TryFrom<&'a [u8]>,
 {
   for (input, expected) in TESTS {
-    #[cfg(any(feature = "std", feature = "alloc"))]
-    println!("test: {:?} expected valid? {:?}", input, expected);
+    #[cfg(feature = "std")]
+    std::println!("test: {:?} expected valid? {:?}", input, expected);
     let name = Domain::<S>::try_from(input.as_bytes());
     assert_eq!(*expected, name.is_ok());
   }
@@ -186,8 +193,12 @@ fn test_basic() {
   let name = Domain::try_from(&"localhost".to_string()).unwrap();
   assert_eq!("localhost", name.as_deref().into_inner());
   assert_eq!("localhost", *name.as_deref().as_inner());
-  let err = ParseDomainError(());
-  println!("{}", err);
+
+  #[cfg(feature = "std")]
+  {
+    let err = ParseDomainError(());
+    std::println!("{}", err);
+  }
 }
 
 macro_rules! gen_quickcheck {

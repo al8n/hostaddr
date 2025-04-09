@@ -103,10 +103,13 @@ impl<'a> Host<&'a [u8]> {
 
 impl<S> From<Domain<S>> for Host<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Domain, Host};
   ///
   /// let domain: Domain<String> = "example.com".parse().unwrap();
   /// let host: Host<String> = domain.into();
+  /// # }
   /// ```
   fn from(value: Domain<S>) -> Self {
     Self::Domain(value.0)
@@ -115,11 +118,14 @@ impl<S> From<Domain<S>> for Host<S> {
 
 impl<S> From<IpAddr> for Host<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   /// use std::net::IpAddr;
   ///
   /// let ip: IpAddr = "127.0.0.1".parse().unwrap();
   /// let host: Host<String> = ip.into();
+  /// # }
   /// ```
   fn from(value: IpAddr) -> Self {
     Self::from_ip(value)
@@ -128,11 +134,14 @@ impl<S> From<IpAddr> for Host<S> {
 
 impl<S> From<Ipv4Addr> for Host<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   /// use std::net::Ipv4Addr;
   ///
   /// let ip: Ipv4Addr = "127.0.0.1".parse().unwrap();
   /// let host: Host<String> = ip.into();
+  /// # }
   /// ```
   fn from(value: Ipv4Addr) -> Self {
     Self::from(IpAddr::V4(value))
@@ -141,11 +150,14 @@ impl<S> From<Ipv4Addr> for Host<S> {
 
 impl<S> From<Ipv6Addr> for Host<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   /// use std::net::Ipv6Addr;
   ///
   /// let ip: Ipv6Addr = "::1".parse().unwrap();
   /// let host: Host<String> = ip.into();
+  /// # }
   /// ```
   fn from(value: Ipv6Addr) -> Self {
     Self::from(IpAddr::V6(value))
@@ -164,10 +176,13 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   ///
   /// let host: Host<&str> = Host::from_ip("127.0.0.1".parse().unwrap());
   /// assert!(host.is_ipv4());
+  /// # }
   /// ```
   #[inline]
   pub const fn is_ipv4(&self) -> bool {
@@ -179,10 +194,13 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   ///
   /// let host: Host<&str> = Host::from_ip("::1".parse().unwrap());
   /// assert!(host.is_ipv6());
+  /// # }
   /// ```
   #[inline]
   pub const fn is_ipv6(&self) -> bool {
@@ -195,11 +213,14 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use std::sync::Arc;
   /// use hostaddr::Host;
   ///
   /// let host = "example.com".parse::<Host<Arc<str>>>().unwrap();
   /// assert_eq!("example.com", &**host.as_ref().unwrap_domain());
+  /// # }
   /// ```
   #[inline]
   pub const fn as_ref(&self) -> Host<&S> {
@@ -214,6 +235,8 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use std::{sync::Arc, net::IpAddr};
   /// use hostaddr::Host;
   ///
@@ -222,6 +245,7 @@ impl<S> Host<S> {
   ///
   /// let host: Host<Arc<str>> = "127.0.0.1".try_into().unwrap();
   /// assert_eq!("127.0.0.1".parse::<IpAddr>().unwrap(), host.as_deref().unwrap_ip());
+  /// # }
   /// ```
   #[inline]
   pub fn as_deref(&self) -> Host<&S::Target>
@@ -239,6 +263,8 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   /// use std::net::IpAddr;
   ///
@@ -247,6 +273,7 @@ impl<S> Host<S> {
   ///
   /// let host: Host<String> = "example.com".parse().unwrap();
   /// assert!(host.ip().is_none());
+  /// # }
   /// ```
   #[inline]
   pub const fn ip(&self) -> Option<&IpAddr> {
@@ -261,6 +288,8 @@ impl<S> Host<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   ///
   /// let host: Host<String> = "example.com".parse().unwrap();
@@ -268,6 +297,7 @@ impl<S> Host<S> {
   ///
   /// let host: Host<String> = "127.0.0.1".parse().unwrap();
   /// assert!(host.domain().is_none());
+  /// # }
   /// ```
   #[inline]
   pub const fn domain(&self) -> Option<&S> {
@@ -285,6 +315,8 @@ impl<S> Host<&S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Host, Buffer};
   /// use std::net::IpAddr;
   ///
@@ -293,6 +325,7 @@ impl<S> Host<&S> {
   ///
   /// let host: Host<Buffer> = "127.0.0.1".parse().unwrap();
   /// assert_eq!("127.0.0.1".parse::<IpAddr>().unwrap(), host.as_ref().copied().unwrap_ip());
+  /// # }
   /// ```
   #[inline]
   pub const fn copied(self) -> Host<S>
@@ -311,6 +344,8 @@ impl<S> Host<&S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::Host;
   /// use std::net::IpAddr;
   ///
@@ -319,6 +354,7 @@ impl<S> Host<&S> {
   ///
   /// let host: Host<String> = "127.0.0.1".parse().unwrap();
   /// assert_eq!("127.0.0.1".parse::<IpAddr>().unwrap(), host.as_ref().cloned().unwrap_ip());
+  /// # }
   /// ```
   #[inline]
   pub fn cloned(self) -> Host<S>
@@ -395,14 +431,17 @@ impl ParseHostError {
 #[cfg(test)]
 mod tests {
   use super::*;
+  #[cfg(any(feature = "std", feature = "alloc"))]
   use std::string::String;
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn negative_from_str() {
     let err = "@a".parse::<Host<String>>().unwrap_err();
     assert_eq!(err.as_str(), "invalid host");
   }
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn negative_try_from_str() {
     let err = Host::<String>::try_from("@a").unwrap_err();

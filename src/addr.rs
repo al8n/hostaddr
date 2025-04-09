@@ -68,10 +68,13 @@ where
 
 impl<S> From<Domain<S>> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Domain, HostAddr};
   ///
   /// let domain = Domain::<String>::try_from("example.com").unwrap();
   /// let host = HostAddr::<String>::from(domain);
+  /// # }
   /// ```
   fn from(domain: Domain<S>) -> Self {
     Self::from_domain(domain)
@@ -80,10 +83,13 @@ impl<S> From<Domain<S>> for HostAddr<S> {
 
 impl<S> From<(Domain<S>, u16)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Domain, HostAddr};
   ///
   /// let domain = Domain::<String>::try_from("example.com").unwrap();
   /// let host = HostAddr::<String>::from((domain, 8080));
+  /// # }
   /// ```
   fn from((host, port): (Domain<S>, u16)) -> Self {
     Self::from_domain(host).with_port(port)
@@ -92,10 +98,13 @@ impl<S> From<(Domain<S>, u16)> for HostAddr<S> {
 
 impl<S> From<(u16, Domain<S>)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Domain, HostAddr};
   ///
   /// let domain = Domain::<String>::try_from("example.com").unwrap();
   /// let host = HostAddr::<String>::from((8080, domain));
+  /// # }
   /// ```
   fn from((port, host): (u16, Domain<S>)) -> Self {
     Self::from_domain(host).with_port(port)
@@ -104,10 +113,13 @@ impl<S> From<(u16, Domain<S>)> for HostAddr<S> {
 
 impl<S> From<Host<S>> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Host, HostAddr};
   ///
   /// let host = Host::<String>::try_from("example.com").unwrap();
   /// let addr = HostAddr::<String>::from(host);
+  /// # }
   /// ```
   fn from(host: Host<S>) -> Self {
     Self::new(host)
@@ -116,10 +128,13 @@ impl<S> From<Host<S>> for HostAddr<S> {
 
 impl<S> From<(Host<S>, u16)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Host, HostAddr};
   ///
   /// let host = Host::<String>::try_from("example.com").unwrap();
   /// let addr = HostAddr::<String>::from((host, 8080));
+  /// # }
   /// ```
   fn from((host, port): (Host<S>, u16)) -> Self {
     Self::new(host).with_port(port)
@@ -128,10 +143,13 @@ impl<S> From<(Host<S>, u16)> for HostAddr<S> {
 
 impl<S> From<(u16, Host<S>)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{Host, HostAddr};
   ///
   /// let host = Host::<String>::try_from("example.com").unwrap();
   /// let addr = HostAddr::<String>::from((8080, host));
+  /// # }
   /// ```
   fn from((port, host): (u16, Host<S>)) -> Self {
     Self::new(host).with_port(port)
@@ -140,11 +158,14 @@ impl<S> From<(u16, Host<S>)> for HostAddr<S> {
 
 impl<S> From<(IpAddr, u16)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::IpAddr;
   ///
   /// let ip = "127.0.0.1".parse::<IpAddr>().unwrap();
   /// let addr = HostAddr::<String>::from((ip, 8080));
+  /// # }
   /// ```
   fn from((host, port): (IpAddr, u16)) -> Self {
     Self::from_ip_addr(host).with_port(port)
@@ -153,11 +174,14 @@ impl<S> From<(IpAddr, u16)> for HostAddr<S> {
 
 impl<S> From<(u16, IpAddr)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::IpAddr;
   ///
   /// let ip = "::1".parse::<IpAddr>().unwrap();
   /// let addr = HostAddr::<String>::from((8080, ip));
+  /// # }
   /// ```
   fn from((port, host): (u16, IpAddr)) -> Self {
     Self::from_ip_addr(host).with_port(port)
@@ -166,11 +190,14 @@ impl<S> From<(u16, IpAddr)> for HostAddr<S> {
 
 impl<S> From<(Ipv4Addr, u16)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::Ipv4Addr;
   ///
   /// let ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
   /// let addr = HostAddr::<String>::from((ip, 8080));
+  /// # }
   /// ```
   fn from((host, port): (Ipv4Addr, u16)) -> Self {
     Self::from((IpAddr::V4(host), port))
@@ -179,11 +206,14 @@ impl<S> From<(Ipv4Addr, u16)> for HostAddr<S> {
 
 impl<S> From<(Ipv6Addr, u16)> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::Ipv6Addr;
   ///
   /// let ip = "::1".parse::<Ipv6Addr>().unwrap();
   /// let addr = HostAddr::<String>::from((ip, 8080));
+  /// # }
   /// ```
   fn from((host, port): (Ipv6Addr, u16)) -> Self {
     Self::from((port, IpAddr::V6(host)))
@@ -192,11 +222,14 @@ impl<S> From<(Ipv6Addr, u16)> for HostAddr<S> {
 
 impl<S> From<SocketAddr> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::SocketAddr;
   ///
   /// let addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
   /// let host = HostAddr::<String>::from(addr);
+  /// # }
   /// ```
   fn from(addr: SocketAddr) -> Self {
     Self::from_sock_addr(addr)
@@ -205,11 +238,14 @@ impl<S> From<SocketAddr> for HostAddr<S> {
 
 impl<S> From<SocketAddrV4> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::SocketAddrV4;
   ///
   /// let addr = "127.0.0.1:8080".parse::<SocketAddrV4>().unwrap();
   /// let host = HostAddr::<String>::from(addr);
+  /// # }
   /// ```
   fn from(addr: SocketAddrV4) -> Self {
     Self::from_sock_addr(SocketAddr::V4(addr))
@@ -218,11 +254,14 @@ impl<S> From<SocketAddrV4> for HostAddr<S> {
 
 impl<S> From<SocketAddrV6> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::SocketAddrV6;
   ///
   /// let addr = "[::1]:8080".parse::<SocketAddrV6>().unwrap();
   /// let host = HostAddr::<String>::from(addr);
+  /// # }
   /// ```
   fn from(addr: SocketAddrV6) -> Self {
     Self::from_sock_addr(SocketAddr::V6(addr))
@@ -231,11 +270,14 @@ impl<S> From<SocketAddrV6> for HostAddr<S> {
 
 impl<S> From<IpAddr> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::IpAddr;
   ///
   /// let ip = "127.0.0.1".parse::<IpAddr>().unwrap();
   /// let addr = HostAddr::<String>::from(ip);
+  /// # }
   /// ```
   fn from(ip: IpAddr) -> Self {
     Self::from_ip_addr(ip)
@@ -244,11 +286,14 @@ impl<S> From<IpAddr> for HostAddr<S> {
 
 impl<S> From<Ipv4Addr> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::Ipv4Addr;
   ///
   /// let ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
   /// let addr = HostAddr::<String>::from(ip);
+  /// # }
   /// ```
   fn from(ip: Ipv4Addr) -> Self {
     Self::from(IpAddr::V4(ip))
@@ -257,11 +302,14 @@ impl<S> From<Ipv4Addr> for HostAddr<S> {
 
 impl<S> From<Ipv6Addr> for HostAddr<S> {
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   /// use std::net::Ipv6Addr;
   ///
   /// let ip = "::1".parse::<Ipv6Addr>().unwrap();
   /// let addr = HostAddr::<String>::from(ip);
+  /// # }
   /// ```
   fn from(ip: Ipv6Addr) -> Self {
     Self::from(IpAddr::V6(ip))
@@ -274,10 +322,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host = HostAddr::<String>::new("example.com".parse().unwrap());
   /// println!("{}", host);
+  /// # }
   /// ```
   #[inline]
   pub const fn new(host: Host<S>) -> Self {
@@ -289,10 +340,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{HostAddr, Domain};
   ///
   /// let host = HostAddr::<String>::from_domain("example.com".parse().unwrap());
   /// println!("{}", host);
+  /// # }
   /// ```
   #[inline]
   pub fn from_domain(domain: Domain<S>) -> Self {
@@ -307,10 +361,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host = HostAddr::<String>::from_ip_addr("127.0.0.1".parse().unwrap());
   /// println!("{}", host);
+  /// # }
   /// ```
   #[inline]
   pub const fn from_ip_addr(ip: IpAddr) -> Self {
@@ -325,10 +382,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host = HostAddr::<String>::from_sock_addr("127.0.0.1:8080".parse().unwrap());
   /// println!("{}", host);
+  /// # }
   /// ```
   #[inline]
   pub const fn from_sock_addr(addr: SocketAddr) -> Self {
@@ -343,10 +403,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let addr: HostAddr<String> = "example.com:8080".parse().unwrap();
   /// println!("{}", addr.host());
+  /// # }
   /// ```
   #[inline]
   pub const fn host(&self) -> &Host<S> {
@@ -358,10 +421,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let addr: HostAddr<String> = HostAddr::from_ip_addr("127.0.0.1".parse().unwrap());
   /// println!("{}", addr.ip().unwrap());
+  /// # }
   /// ```
   #[inline]
   pub const fn ip(&self) -> Option<&IpAddr> {
@@ -373,11 +439,14 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let addr: HostAddr<String> = "example.com:8080".parse().unwrap();
   ///
   /// assert_eq!(Some(8080), addr.port());
+  /// # }
   /// ```
   #[inline]
   pub const fn port(&self) -> Option<u16> {
@@ -389,6 +458,8 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let mut host: HostAddr<String> = "example.com".parse().unwrap();
@@ -396,6 +467,7 @@ impl<S> HostAddr<S> {
   ///   .set_port(8080)
   ///   .set_host("example.org".parse().unwrap());
   /// assert_eq!(Some(8080), host.port());
+  /// # }
   /// ```
   #[inline]
   pub const fn set_port(&mut self, port: u16) -> &mut Self {
@@ -410,6 +482,8 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let mut host: HostAddr<String> = "example.com".parse().unwrap();
@@ -417,6 +491,7 @@ impl<S> HostAddr<S> {
   ///   .maybe_port(Some(8080))
   ///   .set_host("example.org".parse().unwrap());
   /// assert_eq!(Some(8080), host.port());
+  /// # }
   /// ```
   #[inline]
   pub const fn maybe_port(&mut self, port: Option<u16>) -> &mut Self {
@@ -431,10 +506,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host  = "example.com".parse::<HostAddr<String>>().unwrap().maybe_with_port(Some(8080));
   /// assert_eq!(Some(8080), host.port());
+  /// # }
   /// ```
   #[inline]
   pub const fn maybe_with_port(mut self, port: Option<u16>) -> Self {
@@ -449,10 +527,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host = "example.com".parse::<HostAddr<String>>().unwrap().with_port(8080);
   /// assert_eq!(Some(8080), host.port());
+  /// # }
   /// ```
   #[inline]
   pub const fn with_port(mut self, port: u16) -> Self {
@@ -465,6 +546,8 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let mut addr: HostAddr<String> = "example.com".parse().unwrap();
@@ -472,6 +555,7 @@ impl<S> HostAddr<S> {
   ///   .set_host("example.org".parse().unwrap())
   ///   .set_port(8080);
   /// assert_eq!("example.org", addr.as_ref().host().unwrap_domain().as_str());
+  /// # }
   /// ```
   #[inline]
   pub fn set_host(&mut self, host: Host<S>) -> &mut Self {
@@ -484,11 +568,14 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let addr: HostAddr<String> = HostAddr::from_sock_addr("127.0.0.1:8080".parse().unwrap())
   ///   .with_host("example.com".parse().unwrap());
   /// assert_eq!("example.com", addr.as_ref().host().unwrap_domain().as_str());
+  /// # }
   /// ```
   #[inline]
   pub fn with_host(mut self, host: Host<S>) -> Self {
@@ -501,10 +588,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = HostAddr::from_sock_addr("127.0.0.1:8080".parse().unwrap());
   /// assert!(host.is_ip());
+  /// # }
   #[inline]
   pub const fn is_ip(&self) -> bool {
     self.host.is_ip()
@@ -515,10 +605,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = HostAddr::from_sock_addr("127.0.0.1:8080".parse().unwrap());
   /// assert!(host.is_ipv4());
+  /// # }
   /// ```
   #[inline]
   pub const fn is_ipv4(&self) -> bool {
@@ -530,10 +623,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = HostAddr::from_sock_addr("[::1]:8080".parse().unwrap());
   /// assert!(host.is_ipv6());
+  /// # }
   /// ```
   #[inline]
   pub const fn is_ipv6(&self) -> bool {
@@ -545,10 +641,13 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = "example.com".parse().unwrap();
   /// assert!(host.is_domain());
+  /// # }
   /// ```
   #[inline]
   pub const fn is_domain(&self) -> bool {
@@ -561,11 +660,14 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use std::sync::Arc;
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<Arc<str>> = "example.com:8080".try_into().unwrap();
   /// assert_eq!("example.com", &**host.as_ref().host().unwrap_domain());
+  /// # }
   /// ```
   #[inline]
   pub const fn as_ref(&self) -> HostAddr<&S> {
@@ -580,11 +682,14 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use std::sync::Arc;
   /// use hostaddr::HostAddr;
   ///
   /// let host = "example.com:9090".parse::<HostAddr<Arc<str>>>().unwrap();
   /// assert_eq!("example.com", host.as_deref().host().unwrap_domain());
+  /// # }
   /// ```
   #[inline]
   pub fn as_deref(&self) -> HostAddr<&S::Target>
@@ -602,12 +707,15 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = "example.com:8080".parse().unwrap();
   /// let (host, port) = host.into_components();
   /// assert_eq!("example.com", host.unwrap_domain().as_str());
   /// assert_eq!(Some(8080), port);
+  /// # }
   /// ```
   #[inline]
   pub fn into_components(self) -> (Host<S>, Option<u16>) {
@@ -621,12 +729,15 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = "example.com".parse().unwrap();
   /// let (domain, port) = host.unwrap_domain();
   /// assert_eq!("example.com", domain.as_str());
   /// assert_eq!(None, port);
+  /// # }
   /// ```
   #[inline]
   pub fn unwrap_domain(self) -> (S, Option<u16>) {
@@ -638,12 +749,15 @@ impl<S> HostAddr<S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = HostAddr::from_sock_addr("[::1]:8080".parse().unwrap());
   /// let (ip, port) = host.unwrap_ip();
   /// assert_eq!(ip, "::1".parse::<std::net::IpAddr>().unwrap());
   /// assert_eq!(Some(8080), port);
+  /// # }
   /// ```
   #[inline]
   pub fn unwrap_ip(self) -> (IpAddr, Option<u16>) {
@@ -658,10 +772,13 @@ impl<S> HostAddr<&S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::{HostAddr, Buffer};
   ///
   /// let host: HostAddr<Buffer> = HostAddr::try_from("example.com").unwrap();
   /// assert_eq!("example.com", host.as_ref().copied().unwrap_domain().0.as_str());
+  /// # }
   /// ```
   #[inline]
   pub const fn copied(self) -> HostAddr<S>
@@ -680,10 +797,13 @@ impl<S> HostAddr<&S> {
   /// ## Example
   ///
   /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
   /// use hostaddr::HostAddr;
   ///
   /// let host: HostAddr<String> = "example.com".parse().unwrap();
   /// assert_eq!("example.com", host.as_ref().cloned().unwrap_domain().0.as_str());
+  /// # }
   /// ```
   #[inline]
   pub fn cloned(self) -> HostAddr<S>
@@ -866,26 +986,31 @@ mod tests {
 
   #[test]
   fn test_hostaddr_parsing() {
-    let host: HostAddr<String> = "example.com".parse().unwrap();
-    assert_eq!("example.com", host.as_ref().host().unwrap_domain());
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    {
+      use std::string::String;
 
-    let host: HostAddr<String> = "example.com:8080".parse().unwrap();
-    assert_eq!("example.com", host.as_ref().host().unwrap_domain());
-    assert_eq!(Some(8080), host.port());
+      let host: HostAddr<String> = "example.com".parse().unwrap();
+      assert_eq!("example.com", host.as_ref().host().unwrap_domain());
 
-    let host: HostAddr<String> = "127.0.0.1:8080".parse().unwrap();
-    assert_eq!(
-      IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-      host.as_ref().host().unwrap_ip()
-    );
-    assert_eq!(Some(8080), host.port());
+      let host: HostAddr<String> = "example.com:8080".parse().unwrap();
+      assert_eq!("example.com", host.as_ref().host().unwrap_domain());
+      assert_eq!(Some(8080), host.port());
 
-    let host: HostAddr<String> = "[::1]:8080".parse().unwrap();
-    assert_eq!(
-      IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-      host.as_ref().host().unwrap_ip()
-    );
-    assert_eq!(Some(8080), host.port());
+      let host: HostAddr<String> = "127.0.0.1:8080".parse().unwrap();
+      assert_eq!(
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        host.as_ref().host().unwrap_ip()
+      );
+      assert_eq!(Some(8080), host.port());
+
+      let host: HostAddr<String> = "[::1]:8080".parse().unwrap();
+      assert_eq!(
+        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+        host.as_ref().host().unwrap_ip()
+      );
+      assert_eq!(Some(8080), host.port());
+    }
 
     let host: HostAddr<&str> = HostAddr::try_from_ascii_str("[::1]").unwrap();
     assert_eq!(
@@ -912,8 +1037,11 @@ mod tests {
     );
   }
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
   #[test]
   fn test_hostaddr_try_into() {
+    use std::string::String;
+
     let host: HostAddr<String> = "example.com".try_into().unwrap();
     assert_eq!("example.com", host.as_ref().host().unwrap_domain());
 

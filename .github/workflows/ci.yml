@@ -141,7 +141,7 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run build
-      run: cargo  build --all-features
+      run: cargo build --all-features
   
   test:
     name: test
@@ -176,6 +176,8 @@ jobs:
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test
       run: cargo test --all-features
+    - name: Run test (no-std)
+      run: cargo test --no-default-features
 
   coverage:
     name: coverage
