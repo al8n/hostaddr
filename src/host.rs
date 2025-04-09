@@ -65,6 +65,27 @@ impl<'a> Host<&'a str> {
       .map(|d| Host::Domain(d.0))
       .map_err(|_| ParseAsciiHostError(()))
   }
+
+  /// Converts the domain to a `Host<&'a str>`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Host;
+  ///
+  /// let host = Host::try_from_ascii_str("example.com").unwrap();
+  /// assert_eq!(host.as_bytes().unwrap_domain(), b"example.com");
+  ///
+  /// let host = Host::try_from_ascii_str("127.0.0.1").unwrap();
+  /// assert_eq!(host.as_bytes().unwrap_ip(), "127.0.0.1".parse::<core::net::IpAddr>().unwrap());
+  /// ```
+  #[inline]
+  pub const fn as_bytes(&self) -> Host<&'a [u8]> {
+    match self {
+      Self::Ip(ip) => Host::Ip(*ip),
+      Self::Domain(domain) => Host::Domain(domain.as_bytes()),
+    }
+  }
 }
 
 impl<'a> Host<&'a [u8]> {
@@ -98,6 +119,30 @@ impl<'a> Host<&'a [u8]> {
     Domain::try_from_ascii_bytes(input)
       .map(|d| Host::Domain(d.0))
       .map_err(|_| ParseAsciiHostError(()))
+  }
+
+  /// Converts the domain to a `Host<&'a str>`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Host;
+  ///
+  /// let domain = Host::try_from_ascii_bytes(b"example.com").unwrap();
+  /// assert_eq!(domain.as_str().unwrap_domain(), "example.com");
+  ///
+  /// let host = Host::try_from_ascii_bytes(b"127.0.0.1").unwrap();
+  /// assert_eq!(host.as_str().unwrap_ip(), "127.0.0.1".parse::<core::net::IpAddr>().unwrap());
+  /// ```
+  #[inline]
+  pub const fn as_str(&self) -> Host<&'a str> {
+    match self {
+      Self::Ip(ip) => Host::Ip(*ip),
+      Self::Domain(domain) => match core::str::from_utf8(domain) {
+        Ok(domain) => Host::Domain(domain),
+        Err(_) => panic!("A Host<&str> should always be valid UTF-8"),
+      },
+    }
   }
 }
 

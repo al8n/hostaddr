@@ -240,6 +240,21 @@ impl<'a> Domain<&'a str> {
       Err(_) => Err(ParseAsciiDomainError(())),
     }
   }
+
+  /// Converts the domain to a `Domain<&'a str>`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Domain;
+  ///
+  /// let domain = Domain::try_from_ascii_str("example.com").unwrap();
+  /// assert_eq!(domain.as_bytes().into_inner(), b"example.com");
+  /// ```
+  #[inline]
+  pub const fn as_bytes(&self) -> Domain<&'a [u8]> {
+    Domain(self.0.as_bytes())
+  }
 }
 
 impl<'a> Domain<&'a [u8]> {
@@ -272,6 +287,24 @@ impl<'a> Domain<&'a [u8]> {
     match verify_ascii_domain(input) {
       Ok(_) => Ok(Self(input)),
       Err(_) => Err(ParseAsciiDomainError(())),
+    }
+  }
+
+  /// Converts the domain to a `Domain<&'a str>`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Domain;
+  ///
+  /// let domain = Domain::try_from_ascii_bytes(b"example.com").unwrap();
+  /// assert_eq!(domain.as_str().into_inner(), "example.com");
+  /// ```
+  #[inline]
+  pub const fn as_str(&self) -> Domain<&'a str> {
+    match core::str::from_utf8(self.0) {
+      Ok(s) => Domain(s),
+      Err(_) => panic!("A Domain<&[u8]> should always be valid UTF-8"),
     }
   }
 }
