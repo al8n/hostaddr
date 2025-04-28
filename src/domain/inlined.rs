@@ -25,7 +25,7 @@ impl Ord for Buffer {
   }
 }
 
-#[cfg(any(feature = "std", feature = "alloc"))]
+#[cfg(any(feature = "std", feature = "alloc", feature = "smol_str_0_3", feature = "triomphe_0_1", feature = "bytes_1", feature = "tinyvec_1", feature = "smallvec_1", feature = "bytes_1"))]
 macro_rules! impl_from_domain_buffer {
   ($($as:ident(
     $($into:ident -> $ty:ty), +$(,)?
