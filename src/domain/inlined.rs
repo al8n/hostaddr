@@ -51,14 +51,6 @@
 
 use core::borrow::Borrow;
 
-#[allow(unused)]
-#[cfg(not(any(feature = "alloc", feature = "std")))]
-use core::str::from_utf8;
-
-#[allow(unused)]
-#[cfg(any(feature = "alloc", feature = "std"))]
-use simdutf8::basic::from_utf8;
-
 /// An immutable buffer which contains a valid domain.
 ///
 /// The internal storage is a `[u8; 255]` array with the following layout:
@@ -312,10 +304,8 @@ impl Buffer {
   /// ```
   #[inline]
   pub const fn const_as_str(&self) -> &str {
-    match core::str::from_utf8(self.as_bytes()) {
-      Ok(s) => s,
-      Err(_) => panic!("invalid UTF-8"),
-    }
+    // SAFETY: The domain is guaranteed to be valid UTF-8.
+    unsafe { core::str::from_utf8_unchecked(self.as_bytes()) }
   }
 
   /// Returns the domain as a `[u8]`
@@ -418,8 +408,9 @@ const _: () = {
         match res {
           Either::Left(d) => {
             let mut buf = Self::new();
+            // SAFETY: Valid domains are guaranteed to be valid UTF-8.
             buf
-              .write_str(from_utf8(d.0).map_err(serde::de::Error::custom)?)
+              .write_str(unsafe { core::str::from_utf8_unchecked(d.0) })
               .map_err(serde::de::Error::custom)?;
             Ok(buf)
           }
