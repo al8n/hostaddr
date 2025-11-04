@@ -19,29 +19,175 @@ English | [简体中文][zh-cn-url]
 
 </div>
 
+## Features
+
+- **`no_std` and `no-alloc` compatible**: Use the `Buffer` type for stack-allocated domains
+- **Generic storage**: Works with `String`, `Arc<str>`, `Box<str>`, `Vec<u8>`, and many more
+- **IDNA/Punycode support**: Automatic conversion of international domain names (requires `alloc` or `std`)
+- **Type-safe parsing**: Compile-time guarantees for valid domains and hosts
+- **Percent-encoding**: Automatic decoding of percent-encoded domains
+
 ## Installation
 
 ```toml
 [dependencies]
-hostaddr = "0.1"
+hostaddr = "0.2"
 ```
 
-## Example
+### Cargo Features
 
-```rust,ignore
+- **`std`** (default): Enables standard library support
+- **`alloc`**: Enables allocation support without `std`
+- **`serde`**: Serialize/deserialize support
+- **`arbitrary`**: Support for fuzzing with `arbitrary`
+- **`cheap-clone`**: Implement `CheapClone` for smart pointer types
+- **String types**: `smol_str`, `triomphe`, `bytes`, `tinyvec`, `smallvec`
+
+## API Overview
+
+This library provides three main types:
+
+- **`Domain<S>`**: A validated DNS domain name (e.g., `example.com`, `測試.中國`)
+- **`Host<S>`**: Either a domain name or an IP address
+- **`HostAddr<S>`**: A host with an optional port number
+
+## Examples
+
+### Basic Usage
+
+```rust
 use hostaddr::HostAddr;
 
-// parse domain to String
+// Parse domain with String storage
 let addr: HostAddr<String> = "example.com".parse().unwrap();
+assert!(addr.is_domain());
+assert_eq!(addr.to_string(), "example.com");
 
-// parse domain with port to Arc<str>
-let addr: HostAddr<std::sync::Arc<str>> = "example.com:8080".parse().unwrap();
+// Parse domain with port
+let addr: HostAddr<String> = "example.com:8080".parse().unwrap();
+assert_eq!(addr.port(), Some(8080));
 
-// parse domain to Vec<u8>
+// Parse IP address with port
+let addr: HostAddr<String> = "127.0.0.1:8080".parse().unwrap();
+assert!(addr.is_ip());
+assert_eq!(addr.port(), Some(8080));
+
+// Parse IPv6 address with port
+let addr: HostAddr<String> = "[::1]:8080".parse().unwrap();
+assert!(addr.is_ipv6());
+```
+
+### Using Different Storage Types
+
+```rust
+use hostaddr::HostAddr;
+use std::sync::Arc;
+
+// Using Arc<str> for shared ownership
+let addr: HostAddr<Arc<str>> = "example.com:8080".parse().unwrap();
+
+// Using Box<str> for heap allocation
+let addr: HostAddr<Box<str>> = "example.com:8080".parse().unwrap();
+
+// Using Vec<u8> for byte storage
 let addr: HostAddr<Vec<u8>> = "example.com".parse().unwrap();
+```
 
-// parse a fully qualified domain name with port to Box<str>
-let addr: HostAddr<Box<str>> = "example.com.:8080".parse().unwrap();
+### Using Buffer for `no_std`/`no-alloc`
+
+```rust
+use hostaddr::{HostAddr, Buffer, Domain};
+
+// Stack-allocated domain (no heap allocation)
+let domain: Domain<Buffer> = Domain::try_from("example.com").unwrap();
+
+// Works in no_std environments
+let addr: HostAddr<Buffer> = HostAddr::try_from("example.com:443").unwrap();
+```
+
+### Working with Domains
+
+```rust
+use hostaddr::Domain;
+
+// International domain names are automatically converted to punycode
+let domain: Domain<String> = "測試.中國".parse().unwrap();
+assert_eq!(domain.as_inner().as_str(), "xn--g6w251d.xn--fiqz9s");
+
+// Parse ASCII-only domains without punycode conversion
+let domain = Domain::try_from_ascii_str("example.com").unwrap();
+assert_eq!(domain.as_ref().into_inner(), "example.com");
+
+// Fully-qualified domain names (FQDN) are supported
+let domain: Domain<String> = "example.com.".parse().unwrap();
+assert_eq!(domain.as_inner().as_str(), "example.com.");
+```
+
+### Working with Hosts
+
+```rust
+use hostaddr::Host;
+use std::net::IpAddr;
+
+// Parse a host (domain or IP)
+let host: Host<String> = "example.com".parse().unwrap();
+assert!(host.is_domain());
+
+let host: Host<String> = "127.0.0.1".parse().unwrap();
+assert!(host.is_ip());
+
+// Convert between types
+let ip: IpAddr = "127.0.0.1".parse().unwrap();
+let host: Host<String> = Host::from(ip);
+```
+
+### Manipulating HostAddr
+
+```rust
+use hostaddr::HostAddr;
+
+// Create and modify
+let mut addr: HostAddr<String> = "example.com".parse().unwrap();
+addr.set_port(8080);
+assert_eq!(addr.port(), Some(8080));
+
+// Builder-style API
+let addr = HostAddr::<String>::from_domain("api.example.com".parse().unwrap())
+    .with_port(443);
+assert_eq!(addr.to_string(), "api.example.com:443");
+
+// Check host type
+if addr.is_domain() {
+    assert_eq!(addr.port(), Some(443));
+}
+```
+
+### Percent Encoding
+
+```rust
+use hostaddr::Domain;
+
+// Percent-encoded domains are automatically decoded
+let domain: Domain<String> = "example%2Ecom".parse().unwrap();
+assert_eq!(domain.as_inner().as_str(), "example.com");
+
+// Works with international domains too
+let domain: Domain<String> = "測試%2E中國".parse().unwrap();
+assert_eq!(domain.as_inner().as_str(), "xn--g6w251d.xn--fiqz9s");
+```
+
+### Verification Functions
+
+```rust
+use hostaddr::{verify_domain, verify_ascii_domain};
+
+// Verify any domain (including international)
+assert!(verify_domain(b"example.com").is_ok());
+assert!(verify_domain("測試.中國".as_bytes()).is_ok());
+
+// Verify ASCII-only domains
+assert!(verify_ascii_domain(b"example.com").is_ok());
+assert!(verify_ascii_domain("測試.中國".as_bytes()).is_err());
 ```
 
 #### License
