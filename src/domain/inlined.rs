@@ -1,10 +1,75 @@
+//! Stack-allocated buffer for storing validated domain names.
+//!
+//! This module provides the `Buffer` type, a fixed-size buffer designed for
+//! storing domain names without heap allocation. It is ideal for `no_std` and
+//! `no-alloc` environments.
+//!
+//! ## Design
+//!
+//! The `Buffer` type uses a 255-byte array to store domain names:
+//! - 253 bytes for the domain name content (max DNS domain length)
+//! - 1 byte for a trailing dot (for FQDNs)
+//! - 1 byte to store the actual length
+//!
+//! This design allows `Buffer` to be used in const contexts and on the stack
+//! without requiring any heap allocation.
+//!
+//! ## Usage
+//!
+//! The `Buffer` type is typically used with the `Domain<Buffer>` type:
+//!
+//! ```rust
+//! use hostaddr::{Domain, Buffer};
+//!
+//! // Create a stack-allocated domain (no heap allocation)
+//! let domain: Domain<Buffer> = Domain::try_from("example.com").unwrap();
+//!
+//! // Access as str or bytes
+//! assert_eq!(domain.as_inner().as_str(), "example.com");
+//! assert_eq!(domain.as_inner().as_bytes(), b"example.com");
+//! ```
+//!
+//! ## Converting to Other Types
+//!
+//! `Buffer` can be converted to various string and byte types:
+//!
+//! ```rust
+//! # #[cfg(any(feature = "std", feature = "alloc"))]
+//! # {
+//! use hostaddr::{Domain, Buffer};
+//!
+//! let domain: Domain<Buffer> = Domain::try_from("example.com").unwrap();
+//!
+//! // Convert to String
+//! let s: String = domain.into_inner().into();
+//!
+//! // Convert to Vec<u8>
+//! let domain: Domain<Buffer> = Domain::try_from("example.com").unwrap();
+//! let v: Vec<u8> = domain.into_inner().into();
+//! # }
+//! ```
+
 use core::borrow::Borrow;
 
 use simdutf8::basic::from_utf8;
 
 /// An immutable buffer which contains a valid domain.
 ///
-/// The internal is a `[u8; 255]` array.
+/// The internal storage is a `[u8; 255]` array with the following layout:
+/// - bytes 0-253: domain name content
+/// - byte 254: length of the domain name (0-254)
+///
+/// This fixed-size design allows the `Buffer` to be used in `no_std` and
+/// `no-alloc` environments without requiring heap allocation.
+///
+/// ## Example
+///
+/// ```rust
+/// use hostaddr::{Domain, Buffer};
+///
+/// let domain: Domain<Buffer> = Domain::try_from("example.com").unwrap();
+/// assert_eq!(domain.as_inner().as_str(), "example.com");
+/// ```
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, derive_more::Display)]
 #[repr(transparent)]
 #[display("{}", self.as_str())]

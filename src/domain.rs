@@ -80,7 +80,51 @@ impl ParseAsciiDomainError {
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct Domain<S: ?Sized>(pub(super) S);
 
+impl<S: ?Sized> Domain<Domain<S>> {
+  /// Flattens a `Domain<Domain<S>>` into a `Domain<S>`.
+  #[inline]
+  pub fn flatten(self) -> Domain<S>
+  where
+    S: Sized,
+  {
+    Domain(self.0 .0)
+  }
+
+  /// Flattens a `Domain<Domain<S>>` into a `Domain<S>`.
+  #[inline]
+  pub const fn flatten_const(self) -> Domain<S>
+  where
+    S: Sized + Copy,
+  {
+    Domain(self.0 .0)
+  }
+}
+
 impl<S: ?Sized> Domain<S> {
+  /// Creates a new `Domain<S>` without any validation.
+  ///
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the provided `S` is a valid domain name.
+  #[inline]
+  pub(super) const unsafe fn new_unchecked(s: S) -> Self
+  where
+    S: Sized,
+  {
+    Self(s)
+  }
+
+  /// Creates a new `&Domain<S>` without any validation.
+  ///
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the provided `&S` is a valid domain name.
+  #[inline]
+  pub(super) const unsafe fn from_ref_unchecked(s: &S) -> &Self {
+    // SAFETY: The repr(transparent) guarantees that Domain<S> has the same layout as S
+    unsafe { &*(s as *const S as *const Domain<S>) }
+  }
+
   /// Returns the reference to the inner `S`.
   #[inline]
   pub const fn as_inner(&self) -> &S {
@@ -519,6 +563,29 @@ macro_rules! impl_try_from {
   };
 }
 
+#[cfg(not(any(feature = "alloc", feature = "std")))]
+const _: () = {
+  impl TryFrom<&str> for Domain<Buffer> {
+    type Error = ParseDomainError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+      Domain::try_from_ascii_str(value)
+        .map(Into::into)
+        .map_err(|_| ParseDomainError(()))
+    }
+  }
+
+  impl TryFrom<&[u8]> for Domain<Buffer> {
+    type Error = ParseDomainError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+      Domain::try_from_ascii_bytes(value)
+        .map(Into::into)
+        .map_err(|_| ParseDomainError(()))
+    }
+  }
+};
+
 #[cfg(any(feature = "alloc", feature = "std"))]
 const _: () = {
   use std::{
@@ -837,24 +904,48 @@ const _: () = {
 
 /// Verifies that the input is a valid domain name.
 ///
+/// This function validates domain names including international domains (with IDNA/punycode)
+/// and percent-encoded domains. It requires the `alloc` or `std` feature to be enabled.
+///
 /// See also [`verify_ascii_domain`] and [`verify_ascii_domain_allow_percent_encoding`].
+///
+/// ## Valid Inputs
+///
+/// - ASCII domain names: `example.com`
+/// - International domains: `测试.中国` (automatically validated after punycode conversion)
+/// - Punycode domains: `xn--e1afmkfd.xn--80akhbyknj4f`
+/// - Percent-encoded domains: `example%2Ecom`
+/// - FQDNs: `example.com.`
 ///
 /// ## Example
 ///
 /// ```rust
 /// use hostaddr::verify_domain;
 ///
+/// // Valid ASCII domain
 /// let domain = b"example.com";
 /// assert!(verify_domain(domain).is_ok());
 ///
+/// // Valid punycode domain
 /// let domain = b"xn--e1afmkfd.xn--80akhbyknj4f";
 /// assert!(verify_domain(domain).is_ok());
 ///
+/// // Valid international domain
 /// let domain = "测试.中国";
 /// assert!(verify_domain(domain.as_bytes()).is_ok());
 ///
+/// // Valid percent-encoded domain
 /// let domain = "测试%2E中国";
 /// assert!(verify_domain(domain.as_bytes()).is_ok());
+///
+/// // Invalid: empty string
+/// assert!(verify_domain(b"").is_err());
+///
+/// // Invalid: labels starting with hyphen
+/// assert!(verify_domain(b"-example.com").is_err());
+///
+/// // Invalid: invalid characters
+/// assert!(verify_domain(b"exam ple.com").is_err());
 /// ```
 #[cfg(any(feature = "alloc", feature = "std"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
@@ -944,28 +1035,47 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
 /// Verifies that the input is a valid ASCII domain name. The input
 /// can be a percent-encoded domain name.
 ///
-/// This function cannot be used to verify non-ASCII domain names.
+/// This function is more restrictive than [`verify_domain`] as it only accepts
+/// ASCII domain names (including punycode). It will reject international domain
+/// names in their Unicode form.
 ///
-/// Note: This function cannot verify domain name contains unicode characters.
+/// See also [`verify_ascii_domain`] for a version that doesn't allow percent-encoding.
 ///
+/// ## Valid Inputs
+///
+/// - ASCII domain names: `example.com`
+/// - Punycode domains: `xn--e1afmkfd.xn--80akhbyknj4f`
+/// - Percent-encoded ASCII domains: `example%2Ecom`
+/// - FQDNs: `example.com.`
+///
+/// ## Invalid Inputs
+///
+/// - International domains in Unicode form: `测试.中国` (use [`verify_domain`] instead)
+/// - Invalid characters: `exam ple.com`
 ///
 /// ## Example
 ///
 /// ```rust
 /// use hostaddr::verify_ascii_domain_allow_percent_encoding;
 ///
+/// // Valid ASCII domain
 /// let domain = b"example.com";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain).is_ok());
 ///
+/// // Valid percent-encoded domain
 /// let domain = b"example%2Ecom";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain).is_ok());
 ///
+/// // Valid punycode domain
 /// let domain = b"xn--e1afmkfd.xn--80akhbyknj4f";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain).is_ok());
 ///
-/// // Thie fn cannot verify domain name contains unicode characters.
+/// // Invalid: international domain in Unicode form
 /// let domain = "测试.中国";
 /// assert!(verify_ascii_domain_allow_percent_encoding(domain.as_bytes()).is_err());
+///
+/// // Invalid: spaces
+/// assert!(verify_ascii_domain_allow_percent_encoding(b"exam ple.com").is_err());
 /// ```
 pub fn verify_ascii_domain_allow_percent_encoding(
   domain: &[u8],
@@ -997,9 +1107,27 @@ pub fn verify_ascii_domain_allow_percent_encoding(
 
 /// Verifies that the input is a valid ASCII domain name.
 ///
-/// This function cannot be used to verify non-ASCII domain names.
+/// This is the most restrictive verification function. It only accepts plain ASCII
+/// domain names without percent-encoding. Use [`verify_ascii_domain_allow_percent_encoding`]
+/// if you need to support percent-encoded domains, or [`verify_domain`] for international
+/// domains.
 ///
-/// Note: This function cannot verify percent-encoded domain names and domain name contains unicode characters.
+/// ## Valid Inputs
+///
+/// - ASCII domain names: `example.com`
+/// - Punycode domains: `xn--e1afmkfd.xn--80akhbyknj4f`
+/// - FQDNs: `example.com.`
+/// - Labels with hyphens: `my-domain.com`
+/// - Numeric labels (if not all-numeric): `example123.com`
+///
+/// ## Invalid Inputs
+///
+/// - Percent-encoded domains: `example%2Ecom` (use [`verify_ascii_domain_allow_percent_encoding`])
+/// - International domains: `测试.中国` (use [`verify_domain`])
+/// - All-numeric labels: `123.456` (invalid DNS name)
+/// - Labels starting/ending with hyphen: `-example.com`, `example-.com`
+/// - Empty labels: `example..com`
+/// - Invalid characters: `exam ple.com`, `example@.com`
 pub const fn verify_ascii_domain(input: &[u8]) -> Result<(), ParseAsciiDomainError> {
   enum State {
     Start,
