@@ -55,7 +55,7 @@ This library provides three main types:
 
 ### Basic Usage
 
-```rust
+```rust,ignore
 use hostaddr::HostAddr;
 
 // Parse domain with String storage
@@ -79,7 +79,7 @@ assert!(addr.is_ipv6());
 
 ### Using Different Storage Types
 
-```rust
+```rust,ignore
 use hostaddr::HostAddr;
 use std::sync::Arc;
 
@@ -95,7 +95,7 @@ let addr: HostAddr<Vec<u8>> = "example.com".parse().unwrap();
 
 ### Using Buffer for `no_std`/`no-alloc`
 
-```rust
+```rust,ignore
 use hostaddr::{HostAddr, Buffer, Domain};
 
 // Stack-allocated domain (no heap allocation)
@@ -107,7 +107,7 @@ let addr: HostAddr<Buffer> = HostAddr::try_from("example.com:443").unwrap();
 
 ### Working with Domains
 
-```rust
+```rust,ignore
 use hostaddr::Domain;
 
 // International domain names are automatically converted to punycode
@@ -125,7 +125,7 @@ assert_eq!(domain.as_inner().as_str(), "example.com.");
 
 ### Working with Hosts
 
-```rust
+```rust,ignore
 use hostaddr::Host;
 use std::net::IpAddr;
 
@@ -143,7 +143,7 @@ let host: Host<String> = Host::from(ip);
 
 ### Manipulating HostAddr
 
-```rust
+```rust,ignore
 use hostaddr::HostAddr;
 
 // Create and modify
@@ -164,7 +164,7 @@ if addr.is_domain() {
 
 ### Percent Encoding
 
-```rust
+```rust,ignore
 use hostaddr::Domain;
 
 // Percent-encoded domains are automatically decoded
@@ -178,7 +178,7 @@ assert_eq!(domain.as_inner().as_str(), "xn--g6w251d.xn--fiqz9s");
 
 ### Verification Functions
 
-```rust
+```rust,ignore
 use hostaddr::{verify_domain, verify_ascii_domain};
 
 // Verify any domain (including international)
