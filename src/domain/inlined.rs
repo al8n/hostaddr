@@ -51,8 +51,11 @@
 
 use core::borrow::Borrow;
 
+#[allow(unused)]
 #[cfg(not(any(feature = "alloc", feature = "std")))]
 use core::str::from_utf8;
+
+#[allow(unused)]
 #[cfg(any(feature = "alloc", feature = "std"))]
 use simdutf8::basic::from_utf8;
 
