@@ -563,6 +563,29 @@ macro_rules! impl_try_from {
   };
 }
 
+#[cfg(not(any(feature = "alloc", feature = "std")))]
+const _: () = {
+  impl TryFrom<&str> for Domain<Buffer> {
+    type Error = ParseDomainError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+      Domain::try_from_ascii_str(value)
+        .map(Into::into)
+        .map_err(|_| ParseDomainError(()))
+    }
+  }
+
+  impl TryFrom<&[u8]> for Domain<Buffer> {
+    type Error = ParseDomainError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+      Domain::try_from_ascii_bytes(value)
+        .map(Into::into)
+        .map_err(|_| ParseDomainError(()))
+    }
+  }
+};
+
 #[cfg(any(feature = "alloc", feature = "std"))]
 const _: () = {
   use std::{
