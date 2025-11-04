@@ -3,6 +3,11 @@ use core::{
   str::FromStr,
 };
 
+#[cfg(not(any(feature = "alloc", feature = "std")))]
+use core::str::from_utf8;
+#[cfg(any(feature = "alloc", feature = "std"))]
+use simdutf8::basic::from_utf8;
+
 pub use derive_more::TryUnwrapError;
 
 use super::Domain;
@@ -111,7 +116,7 @@ impl<'a> Host<&'a [u8]> {
   /// ```
   #[inline]
   pub fn try_from_ascii_bytes(input: &'a [u8]) -> Result<Self, ParseAsciiHostError> {
-    let input_str = simdutf8::basic::from_utf8(input).map_err(|_| ParseAsciiHostError(()))?;
+    let input_str = from_utf8(input).map_err(|_| ParseAsciiHostError(()))?;
     if let Ok(ip) = input_str.parse() {
       return Ok(Host::Ip(ip));
     }

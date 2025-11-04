@@ -111,51 +111,6 @@ impl<S> From<(u16, Domain<S>)> for HostAddr<S> {
   }
 }
 
-impl<S> From<Host<S>> for HostAddr<S> {
-  /// ```rust
-  /// # #[cfg(any(feature = "std", feature = "alloc"))]
-  /// # {
-  /// use hostaddr::{Host, HostAddr};
-  ///
-  /// let host = Host::<String>::try_from("example.com").unwrap();
-  /// let addr = HostAddr::<String>::from(host);
-  /// # }
-  /// ```
-  fn from(host: Host<S>) -> Self {
-    Self::new(host)
-  }
-}
-
-impl<S> From<(Host<S>, u16)> for HostAddr<S> {
-  /// ```rust
-  /// # #[cfg(any(feature = "std", feature = "alloc"))]
-  /// # {
-  /// use hostaddr::{Host, HostAddr};
-  ///
-  /// let host = Host::<String>::try_from("example.com").unwrap();
-  /// let addr = HostAddr::<String>::from((host, 8080));
-  /// # }
-  /// ```
-  fn from((host, port): (Host<S>, u16)) -> Self {
-    Self::new(host).with_port(port)
-  }
-}
-
-impl<S> From<(u16, Host<S>)> for HostAddr<S> {
-  /// ```rust
-  /// # #[cfg(any(feature = "std", feature = "alloc"))]
-  /// # {
-  /// use hostaddr::{Host, HostAddr};
-  ///
-  /// let host = Host::<String>::try_from("example.com").unwrap();
-  /// let addr = HostAddr::<String>::from((8080, host));
-  /// # }
-  /// ```
-  fn from((port, host): (u16, Host<S>)) -> Self {
-    Self::new(host).with_port(port)
-  }
-}
-
 impl<S> From<(IpAddr, u16)> for HostAddr<S> {
   /// ```rust
   /// # #[cfg(any(feature = "std", feature = "alloc"))]
@@ -313,6 +268,65 @@ impl<S> From<Ipv6Addr> for HostAddr<S> {
   /// ```
   fn from(ip: Ipv6Addr) -> Self {
     Self::from(IpAddr::V6(ip))
+  }
+}
+
+impl<S> From<HostAddr<S>> for HostAddr<Domain<S>> {
+  /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
+  /// use hostaddr::{HostAddr, Domain};
+  /// use std::net::Ipv6Addr;
+  ///
+  /// let ip = "::1".parse::<Ipv6Addr>().unwrap();
+  /// let addr = HostAddr::<String>::from(ip);
+  /// let domain_addr: HostAddr<Domain<String>> = addr.into();
+  /// # }
+  /// ```
+  #[inline]
+  fn from(value: HostAddr<S>) -> Self {
+    let (host, port) = value.into_components();
+    match host {
+      Host::Domain(domain) => Self {
+        // Safety: the ways to construct a valid HostAddr guarantee the domain must be valid.
+        host: Host::Domain(unsafe { Domain::new_unchecked(domain) }),
+        port,
+      },
+      Host::Ip(ip) => Self {
+        host: Host::Ip(ip),
+        port,
+      },
+    }
+  }
+}
+
+impl<'a, S> From<&'a HostAddr<S>> for HostAddr<&'a Domain<S>> {
+  /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
+  /// use hostaddr::{HostAddr, Domain};
+  /// use std::net::Ipv6Addr;
+  ///
+  /// let ip = "::1".parse::<Ipv6Addr>().unwrap();
+  /// let addr = HostAddr::<String>::from(ip);
+  ///
+  /// let domain_addr: HostAddr<&Domain<String>> = (&addr).into();
+  /// # }
+  /// ```
+  #[inline]
+  fn from(value: &'a HostAddr<S>) -> Self {
+    let (host, port) = value.as_ref().into_components();
+    match host {
+      Host::Domain(domain) => Self {
+        // Safety: the ways to construct a valid HostAddr guarantee the domain must be valid.
+        host: Host::Domain(unsafe { Domain::from_ref_unchecked(domain) }),
+        port,
+      },
+      Host::Ip(ip) => Self {
+        host: Host::Ip(ip),
+        port,
+      },
+    }
   }
 }
 
@@ -541,6 +555,75 @@ impl<S> HostAddr<S> {
     self
   }
 
+  /// Set a default port if no port is currently set.
+  ///
+  /// If a port is already set, this method does nothing.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
+  /// use hostaddr::HostAddr;
+  ///
+  /// let addr = "example.com".parse::<HostAddr<String>>().unwrap()
+  ///   .with_default_port(443);
+  /// assert_eq!(Some(443), addr.port());
+  ///
+  /// let addr = "example.com:8080".parse::<HostAddr<String>>().unwrap()
+  ///   .with_default_port(443);
+  /// assert_eq!(Some(8080), addr.port());
+  /// # }
+  /// ```
+  #[inline]
+  pub const fn with_default_port(mut self, default: u16) -> Self {
+    if self.port.is_none() {
+      self.port = Some(default);
+    }
+    self
+  }
+
+  /// Clear the port number.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
+  /// use hostaddr::HostAddr;
+  ///
+  /// let mut addr: HostAddr<String> = "example.com:8080".parse().unwrap();
+  /// addr.clear_port();
+  /// assert_eq!(None, addr.port());
+  /// # }
+  /// ```
+  #[inline]
+  pub const fn clear_port(&mut self) -> &mut Self {
+    self.port = None;
+    self
+  }
+
+  /// Returns `true` if a port is set.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
+  /// use hostaddr::HostAddr;
+  ///
+  /// let addr: HostAddr<String> = "example.com:8080".parse().unwrap();
+  /// assert!(addr.has_port());
+  ///
+  /// let addr: HostAddr<String> = "example.com".parse().unwrap();
+  /// assert!(!addr.has_port());
+  /// # }
+  /// ```
+  #[inline]
+  pub const fn has_port(&self) -> bool {
+    self.port.is_some()
+  }
+
   /// Set the host name
   ///
   /// ## Example
@@ -652,6 +735,80 @@ impl<S> HostAddr<S> {
   #[inline]
   pub const fn is_domain(&self) -> bool {
     self.host.is_domain()
+  }
+
+  /// Returns `true` if the host represents localhost.
+  ///
+  /// This method checks if the host is:
+  /// - An IPv4 loopback address (127.0.0.0/8)
+  /// - An IPv6 loopback address (::1)
+  /// - The domain name "localhost"
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::HostAddr;
+  ///
+  /// let addr = HostAddr::try_from_ascii_str("127.0.0.1").unwrap();
+  /// assert!(addr.is_localhost());
+  ///
+  /// let addr = HostAddr::try_from_ascii_str("::1").unwrap();
+  /// assert!(addr.is_localhost());
+  ///
+  /// let addr = HostAddr::try_from_ascii_str("localhost").unwrap();
+  /// assert!(addr.is_localhost());
+  ///
+  /// let addr = HostAddr::try_from_ascii_str("example.com").unwrap();
+  /// assert!(!addr.is_localhost());
+  /// ```
+  #[inline]
+  pub fn is_localhost(&self) -> bool
+  where
+    S: AsRef<str>,
+  {
+    match &self.host {
+      Host::Ip(IpAddr::V4(ip)) => ip.is_loopback(),
+      Host::Ip(IpAddr::V6(ip)) => ip.is_loopback(),
+      Host::Domain(domain) => {
+        let s = domain.as_ref();
+        s.eq_ignore_ascii_case("localhost") || s.eq_ignore_ascii_case("localhost.")
+      }
+    }
+  }
+
+  /// Converts to a `SocketAddr` if the host is an IP address and a port is set.
+  ///
+  /// Returns `None` if the host is a domain name or if no port is set.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// # #[cfg(any(feature = "std", feature = "alloc"))]
+  /// # {
+  /// use hostaddr::HostAddr;
+  /// use std::net::{IpAddr, SocketAddr};
+  ///
+  /// let addr: HostAddr<String> = "127.0.0.1:8080".parse().unwrap();
+  /// assert_eq!(
+  ///   Some(SocketAddr::new("127.0.0.1".parse::<IpAddr>().unwrap(), 8080)),
+  ///   addr.to_socket_addr()
+  /// );
+  ///
+  /// // Domain names cannot be converted to SocketAddr
+  /// let addr: HostAddr<String> = "example.com:8080".parse().unwrap();
+  /// assert_eq!(None, addr.to_socket_addr());
+  ///
+  /// // Missing port returns None
+  /// let addr: HostAddr<String> = "127.0.0.1".parse().unwrap();
+  /// assert_eq!(None, addr.to_socket_addr());
+  /// # }
+  /// ```
+  #[inline]
+  pub const fn to_socket_addr(&self) -> Option<SocketAddr> {
+    match (&self.host, self.port) {
+      (Host::Ip(ip), Some(port)) => Some(SocketAddr::new(*ip, port)),
+      _ => None,
+    }
   }
 
   /// Converts from `&HostAddr<S>` to `HostAddr<&S>`.
@@ -983,6 +1140,21 @@ where
 
   fn try_from(s: &'a str) -> Result<Self, Self::Error> {
     try_from_str!(try_into(s))
+  }
+}
+
+impl<'a, S> TryFrom<(&'a str, u16)> for HostAddr<S>
+where
+  Domain<S>: TryFrom<&'a str>,
+{
+  type Error = ParseHostAddrError;
+
+  fn try_from((s, port): (&'a str, u16)) -> Result<Self, Self::Error> {
+    let host = Host::try_from(s)?;
+    Ok(Self {
+      host,
+      port: Some(port),
+    })
   }
 }
 

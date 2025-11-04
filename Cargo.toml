@@ -1,13 +1,13 @@
 [package]
 name = "hostaddr"
-version = "0.1.8"
+version = "0.2.2"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
 homepage = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
 description = "Extended types (`Domain`, `Host`, `HostAddr`) for working with net in Rust."
 license = "MIT OR Apache-2.0"
-rust-version = "1.81"
+rust-version = "1.83"
 categories = ["network-programming", "data-structures", "no-std", "no-std::no-alloc"]
 keywords = ["host", "hostaddr", "domain"]
 
