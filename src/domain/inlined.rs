@@ -290,7 +290,8 @@ impl Buffer {
   /// Returns the domain as a `str`.
   #[inline]
   pub fn as_str(&self) -> &str {
-    from_utf8(&self.buf[..self.len()]).expect("valid UTF-8")
+    // SAFETY: The domain is guaranteed to be valid UTF-8.
+    unsafe { core::str::from_utf8_unchecked(&self.buf[..self.len()]) }
   }
 
   /// Returns the domain as a `str`.
@@ -314,7 +315,7 @@ impl Buffer {
     }
   }
 
-  /// Returns the domian as a `[u8]`
+  /// Returns the domain as a `[u8]`
   #[inline]
   pub const fn as_bytes(&self) -> &[u8] {
     let len = self.len();

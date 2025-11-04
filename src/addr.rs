@@ -41,8 +41,8 @@ impl ParseAsciiHostAddrError {
   }
 }
 
-/// A host address, which is consit of a [`Host`] and an optional port number.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+/// A host address, which consists of a [`Host`] and an optional port number.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct HostAddr<S> {
   /// The host name
