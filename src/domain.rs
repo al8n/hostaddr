@@ -157,6 +157,86 @@ impl<S: ?Sized> Domain<S> {
   {
     Domain(self.0.deref())
   }
+
+  /// Converts the domain to a fully qualified domain name (FQDN) by appending a dot (`.`)
+  /// at the end if it is not already a FQDN.
+  ///
+  /// Returns `None` if the domain is already a FQDN.
+  ///
+  /// ## Domain Length Constraints
+  ///
+  /// Valid domain names are at most 253 bytes long (or 254 bytes with trailing dot for FQDN).
+  /// Since validation ensures these constraints, this method will always succeed for valid domains.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::{Domain, Buffer};
+  ///
+  /// // Regular domain to FQDN
+  /// let domain = Domain::<str>::try_from_ascii_str("example.com").unwrap();
+  /// let fqdn = domain.to_fqdn().unwrap();
+  /// assert_eq!(fqdn.as_ref().into_inner().as_str(), "example.com.");
+  ///
+  /// // Already a FQDN
+  /// let domain = Domain::<str>::try_from_ascii_str("example.com.").unwrap();
+  /// assert!(domain.to_fqdn().is_none());
+  ///
+  /// // Works with max-length domains (253 bytes)
+  /// let long_label = "a".repeat(63);
+  /// let long_domain = format!("{}.{}.{}.{}", long_label, long_label, long_label, &long_label[..61]);
+  /// let domain = Domain::<str>::try_from_ascii_str(&long_domain).unwrap();
+  /// assert_eq!(domain.as_ref().into_inner().len(), 253);
+  /// let fqdn = domain.to_fqdn().unwrap();
+  /// assert_eq!(fqdn.as_ref().into_inner().as_str().len(), 254);
+  /// ```
+  #[inline]
+  pub fn to_fqdn(&self) -> Option<Domain<Buffer>>
+  where
+    S: AsRef<[u8]>,
+  {
+    let bytes = self.0.as_ref();
+    if bytes.ends_with(b".") {
+      None
+    } else {
+      let mut buf = Buffer::copy_from_slice(bytes);
+      // SAFETY: Valid domains are at most 253 bytes, and Buffer can hold 254 bytes.
+      // Therefore, there is always room to append the trailing dot.
+      buf
+        .push(b'.')
+        .expect("valid domain length guarantees capacity for FQDN dot");
+      Some(Domain(buf))
+    }
+  }
+
+  /// Returns `true` if the domain is a fully qualified domain name (FQDN).
+  ///
+  /// A FQDN is a domain name that ends with a dot (`.`), representing the DNS root.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use hostaddr::Domain;
+  ///
+  /// // Regular domain (not FQDN)
+  /// let domain = Domain::<str>::try_from_ascii_str("example.com").unwrap();
+  /// assert!(!domain.is_fqdn());
+  ///
+  /// // FQDN (ends with dot)
+  /// let fqdn = Domain::<str>::try_from_ascii_str("example.com.").unwrap();
+  /// assert!(fqdn.is_fqdn());
+  ///
+  /// // Root domain is a FQDN
+  /// let root = Domain::<str>::try_from_ascii_str(".").unwrap();
+  /// assert!(root.is_fqdn());
+  /// ```
+  #[inline]
+  pub fn is_fqdn(&self) -> bool
+  where
+    S: AsRef<[u8]>,
+  {
+    self.0.as_ref().ends_with(b".")
+  }
 }
 
 impl<S: ?Sized> Borrow<S> for Domain<S> {
@@ -379,10 +459,8 @@ impl Domain<[u8]> {
   /// ```
   #[inline]
   pub const fn as_str(&self) -> &Domain<str> {
-    match core::str::from_utf8(&self.0) {
-      Ok(s) => Domain::<str>::ref_cast(s),
-      Err(_) => panic!("A Domain<[u8]> should always be valid UTF-8"),
-    }
+    // SAFETY: We have already verified that the bytes are ASCII,
+    unsafe { Domain::<str>::ref_cast(core::str::from_utf8_unchecked(&self.0)) }
   }
 }
 
@@ -453,6 +531,23 @@ impl From<&Domain<[u8]>> for Domain<Buffer> {
   fn from(value: &Domain<[u8]>) -> Self {
     Domain(Buffer::copy_from_slice(&value.0))
   }
+}
+
+#[allow(unused)]
+macro_rules! from_domain_buffer {
+  ($(:<const $n:ident: usize>:)? $ty:ty => $conv:ident::$from:ident) => {
+    impl $(<const $n: usize>)? From<Domain<Buffer>> for Domain<$ty> {
+      fn from(value: Domain<Buffer>) -> Self {
+        Domain(<$ty>::$from(value.0.$conv()))
+      }
+    }
+
+    impl $(<const $n: usize>)? From<&Domain<Buffer>> for Domain<$ty> {
+      fn from(value: &Domain<Buffer>) -> Self {
+        Domain(<$ty>::$from(value.0.$conv()))
+      }
+    }
+  };
 }
 
 #[allow(unused)]
@@ -793,16 +888,25 @@ const _: () = {
 
   impl_try_from!(
     @bytes
-    |d: Domain<_>| from_utf8(d.0).expect("domain is ASCII").to_string() => String,
-    |d: Domain<_>| std::sync::Arc::from(from_utf8(d.0).expect("domain is ASCII")) => std::sync::Arc<str>,
-    |d: Domain<_>| std::boxed::Box::from(from_utf8(d.0).expect("domain is ASCII")) => std::boxed::Box<str>,
-    |d: Domain<_>| std::rc::Rc::from(from_utf8(d.0).expect("domain is ASCII")) => std::rc::Rc<str>,
+    |d: Domain<_>| unsafe { core::str::from_utf8_unchecked(d.0) }.to_string() => String,
+    |d: Domain<_>| std::sync::Arc::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => std::sync::Arc<str>,
+    |d: Domain<_>| std::boxed::Box::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => std::boxed::Box<str>,
+    |d: Domain<_>| std::rc::Rc::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => std::rc::Rc<str>,
     |d: Domain<&[u8]>| d.0.to_vec() => Vec<u8>,
     |d: Domain<_>| std::sync::Arc::from(d.0) => std::sync::Arc<[u8]>,
     |d: Domain<_>| std::boxed::Box::from(d.0) => std::boxed::Box<[u8]>,
     |d: Domain<_>| std::rc::Rc::from(d.0) => std::rc::Rc<[u8]>,
     |d: Domain<&[u8]>| Buffer::copy_from_slice(d.0) => Buffer,
   );
+
+  from_domain_buffer!(String => as_str::from);
+  from_domain_buffer!(std::sync::Arc<str> => as_str::from);
+  from_domain_buffer!(std::boxed::Box<str> => as_str::from);
+  from_domain_buffer!(std::rc::Rc<str> => as_str::from);
+  from_domain_buffer!(Vec<u8> => as_bytes::from);
+  from_domain_buffer!(std::sync::Arc<[u8]> => as_bytes::from);
+  from_domain_buffer!(std::boxed::Box<[u8]> => as_bytes::from);
+  from_domain_buffer!(std::rc::Rc<[u8]> => as_bytes::from);
 
   fn domain_to_ascii<S>(
     domain: &[u8],
@@ -841,9 +945,11 @@ const _: () = {
     |d: Domain<_>| SmolStr::from(d.0) => SmolStr,
   );
   impl_try_from!(@bytes
-    |d: Domain<_>| SmolStr::from(from_utf8(d.0).expect("domain is ASCII")) => SmolStr,
+    |d: Domain<_>| SmolStr::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => SmolStr,
   );
   impl_try_from!(@owned try_from_str(as_str, SmolStr));
+
+  from_domain_buffer!(SmolStr => as_str::new);
 };
 
 #[cfg(all(feature = "triomphe_0_1", any(feature = "std", feature = "alloc")))]
@@ -859,6 +965,9 @@ const _: () = {
     |d: Domain<&[u8]>| Arc::from(from_utf8(d.0).expect("doamain is ASCII")) => Arc<str>,
   );
   impl_try_from!(@owned try_from_str(as_ref, Arc<str>), try_from_bytes(as_ref, Arc<[u8]>));
+
+  from_domain_buffer!(Arc<str> => as_str::from);
+  from_domain_buffer!(Arc<[u8]> => as_bytes::from);
 };
 
 #[cfg(all(feature = "bytes_1", any(feature = "std", feature = "alloc")))]
@@ -872,6 +981,7 @@ const _: () = {
     |d: Domain<_>| Bytes::copy_from_slice(d.0) => Bytes,
   );
   impl_try_from!(@owned try_from_bytes(as_ref, Bytes));
+  from_domain_buffer!(Bytes => as_bytes::copy_from_slice);
 };
 
 #[cfg(feature = "cheap-clone")]
@@ -890,6 +1000,7 @@ const _: () = {
   impl_try_from!(
     @owned_const_n try_from_bytes(as_ref, TinyVec<[u8; N]>),
   );
+  from_domain_buffer!(:<const N: usize>: TinyVec<[u8; N]> => as_bytes::from);
 };
 
 #[cfg(all(feature = "smallvec_1", any(feature = "std", feature = "alloc")))]
@@ -903,6 +1014,7 @@ const _: () = {
     |d: Domain<_>| SmallVec::from_slice(d.0) => SmallVec<[u8; N]>,
   );
   impl_try_from!(@owned_const_n try_from_bytes(as_ref, SmallVec<[u8; N]>));
+  from_domain_buffer!(:<const N: usize>: SmallVec<[u8; N]> => as_bytes::from_slice);
 };
 
 /// Verifies that the input is a valid domain name.
