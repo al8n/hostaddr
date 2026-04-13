@@ -1293,6 +1293,7 @@ mod tests {
   /// Regression test: IPv6 with port must display as `[::1]:port`, not `::1:port`.
   /// The old output was ambiguous and could not be parsed back.
   #[test]
+  #[cfg(feature = "std")]
   fn ipv6_display_roundtrip() {
     let addr = HostAddr::<&str>::from_sock_addr("[::1]:8080".parse().unwrap());
     assert_eq!(addr.to_string(), "[::1]:8080");

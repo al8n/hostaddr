@@ -382,6 +382,7 @@ fn test_domain_new_unchecked_and_from_ref_unchecked() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn test_domain_length_boundary() {
   // 253 bytes - valid
   let d = format!(

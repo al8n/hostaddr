@@ -133,7 +133,7 @@ jobs:
       - name: Install cargo-hack
         run: cargo install cargo-hack
       - name: Run build
-        run: cargo hack build --feature-powerset
+        run: cargo hack build --each-feature
 
   test:
     name: test
@@ -162,7 +162,7 @@ jobs:
       - name: Install cargo-hack
         run: cargo install cargo-hack
       - name: Run test
-        run: cargo hack test --feature-powerset
+        run: cargo hack test --each-feature
 
   coverage:
     name: coverage

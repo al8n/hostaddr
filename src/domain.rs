@@ -732,7 +732,6 @@ const _: () = {
     /// let domain = Domain::try_from_bytes("测试%2E中国".as_bytes()).unwrap();
     /// assert_eq!(domain.unwrap_right().as_bytes(), b"xn--0zwm56d.xn--fiqs8s");
     /// ```
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
     #[inline]
     pub fn try_from_bytes(input: S) -> Result<either::Either<Self, Buffer>, ParseDomainError>
     where
@@ -824,7 +823,6 @@ const _: () = {
     /// assert_eq!(domain.unwrap_right().as_str(), "xn--0zwm56d.xn--fiqs8s");
     /// ```
     #[inline]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
     pub fn try_from_str(input: S) -> Result<either::Either<Self, Buffer>, ParseDomainError>
     where
       S: AsRef<str>,
@@ -1344,6 +1342,7 @@ mod tests {
   /// Regression test: verify_ascii_domain must enforce the 253-byte max length
   /// (254 with trailing dot for FQDN). Previously, domains > 254 bytes were accepted.
   #[test]
+  #[cfg(feature = "std")]
   fn domain_length_boundary() {
     // Helper to build a domain of exact length from 50-byte labels
     fn make_domain(label_lens: &[usize]) -> std::string::String {
