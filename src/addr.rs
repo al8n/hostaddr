@@ -1289,4 +1289,31 @@ mod tests {
     let err = HostAddr::try_from_ascii_str("example.com:aaa").unwrap_err();
     assert!(matches!(err, ParseAsciiHostAddrError::Port(_)));
   }
+
+  /// Regression test: IPv6 with port must display as `[::1]:port`, not `::1:port`.
+  /// The old output was ambiguous and could not be parsed back.
+  #[test]
+  fn ipv6_display_roundtrip() {
+    let addr = HostAddr::<&str>::from_sock_addr("[::1]:8080".parse().unwrap());
+    assert_eq!(addr.to_string(), "[::1]:8080");
+
+    // Without port, no brackets
+    let addr = HostAddr::<&str>::from_ip_addr("::1".parse().unwrap());
+    assert_eq!(addr.to_string(), "::1");
+
+    // IPv4 unchanged
+    let addr = HostAddr::<&str>::from_sock_addr("127.0.0.1:3000".parse().unwrap());
+    assert_eq!(addr.to_string(), "127.0.0.1:3000");
+
+    // Roundtrip: display then parse
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    {
+      use std::string::String;
+      let addr = HostAddr::<String>::from_sock_addr("[::1]:443".parse().unwrap());
+      let displayed = addr.to_string();
+      let reparsed: HostAddr<String> = displayed.parse().unwrap();
+      assert_eq!(reparsed.port(), Some(443));
+      assert!(reparsed.is_ipv6());
+    }
+  }
 }
