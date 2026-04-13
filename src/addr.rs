@@ -59,9 +59,10 @@ where
   S: core::fmt::Display,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    match self.port {
-      Some(port) => write!(f, "{}:{}", self.host, port),
-      None => write!(f, "{}", self.host),
+    match (self.host.is_ipv6(), self.port) {
+      (true, Some(port)) => write!(f, "[{}]:{}", self.host, port),
+      (_, Some(port)) => write!(f, "{}:{}", self.host, port),
+      _ => write!(f, "{}", self.host),
     }
   }
 }
@@ -288,8 +289,7 @@ impl<S> From<HostAddr<S>> for HostAddr<Domain<S>> {
     let (host, port) = value.into_components();
     match host {
       Host::Domain(domain) => Self {
-        // Safety: the ways to construct a valid HostAddr guarantee the domain must be valid.
-        host: Host::Domain(unsafe { Domain::new_unchecked(domain) }),
+        host: Host::Domain(Domain::new_unchecked(domain)),
         port,
       },
       Host::Ip(ip) => Self {
@@ -318,8 +318,7 @@ impl<'a, S> From<&'a HostAddr<S>> for HostAddr<&'a Domain<S>> {
     let (host, port) = value.as_ref().into_components();
     match host {
       Host::Domain(domain) => Self {
-        // Safety: the ways to construct a valid HostAddr guarantee the domain must be valid.
-        host: Host::Domain(unsafe { Domain::from_ref_unchecked(domain) }),
+        host: Host::Domain(Domain::from_ref_unchecked(domain)),
         port,
       },
       Host::Ip(ip) => Self {

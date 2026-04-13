@@ -1,15 +1,15 @@
 [package]
 name = "hostaddr"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
 homepage = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
-description = "Extended types (`Domain`, `Host`, `HostAddr`) for working with net in Rust."
+description = "Type-safe, validated DNS domain names, hosts, and host addresses with IDNA/punycode support. Generic over storage (`String`, `Arc<str>`, `Vec<u8>`, stack-allocated `Buffer`, etc.) and `no_std`/`no-alloc` compatible."
 license = "MIT OR Apache-2.0"
 rust-version = "1.83"
-categories = ["network-programming", "data-structures", "no-std", "no-std::no-alloc"]
-keywords = ["host", "hostaddr", "domain"]
+categories = ["network-programming", "parser-implementations", "no-std", "no-std::no-alloc"]
+keywords = ["dns", "domain", "hostname", "host", "address"]
 
 [features]
 default = ["std"]
@@ -90,6 +90,6 @@ rmp-serde = "1"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints.rust]
+[workspace.lints.rust]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"

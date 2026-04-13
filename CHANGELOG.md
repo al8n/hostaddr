@@ -1,5 +1,13 @@
 # RELEASED
 
+## 0.2.4 (Apr 13th, 2026)
+
+BUGFIXES
+
+- Fix domain validation accepting names longer than 253 bytes (RFC 1035 violation)
+- Fix `HostAddr` `Display` for IPv6 with port producing ambiguous output (`::1:8080` instead of `[::1]:8080`)
+- Remove misleading `unsafe` from internal `Domain` constructors that cannot cause memory unsafety
+
 ## 0.1.2 & 0.1.3 (Apr 9th, 2025)
 
 FEATURES

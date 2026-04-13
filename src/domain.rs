@@ -106,11 +106,12 @@ impl<S: ?Sized> Domain<Domain<S>> {
 impl<S: ?Sized> Domain<S> {
   /// Creates a new `Domain<S>` without any validation.
   ///
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the provided `S` is a valid domain name.
+  /// **Note:** The caller should ensure that the provided `S` is a valid domain
+  /// name to uphold `Domain`'s logical invariant. This is not marked `unsafe`
+  /// because `Domain` is `#[repr(transparent)]` and no memory safety issue can
+  /// arise from wrapping an invalid value.
   #[inline]
-  pub(super) const unsafe fn new_unchecked(s: S) -> Self
+  pub(super) const fn new_unchecked(s: S) -> Self
   where
     S: Sized,
   {
@@ -119,12 +120,13 @@ impl<S: ?Sized> Domain<S> {
 
   /// Creates a new `&Domain<S>` without any validation.
   ///
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the provided `&S` is a valid domain name.
+  /// **Note:** The caller should ensure that the provided `&S` is a valid domain
+  /// name to uphold `Domain`'s logical invariant. The pointer cast is sound
+  /// because `Domain` is `#[repr(transparent)]`.
   #[inline]
-  pub(super) const unsafe fn from_ref_unchecked(s: &S) -> &Self {
-    // SAFETY: The repr(transparent) guarantees that Domain<S> has the same layout as S
+  pub(super) const fn from_ref_unchecked(s: &S) -> &Self {
+    // SAFETY: Domain<S> is #[repr(transparent)] over S, so &S and &Domain<S>
+    // have identical memory layout for both sized and unsized types.
     unsafe { &*(s as *const S as *const Domain<S>) }
   }
 
@@ -1268,10 +1270,14 @@ pub const fn verify_ascii_domain(input: &[u8]) -> Result<(), ParseAsciiDomainErr
     return Err(ParseAsciiDomainError(()));
   }
 
-  if len == MAX_NAME_LENGTH + 1 {
-    let Some(b'.') = input.last() else {
+  if len > MAX_NAME_LENGTH {
+    if len == MAX_NAME_LENGTH + 1 {
+      let Some(b'.') = input.last() else {
+        return Err(ParseAsciiDomainError(()));
+      };
+    } else {
       return Err(ParseAsciiDomainError(()));
-    };
+    }
   }
 
   if input[0] == b'.' && len == 1 {
