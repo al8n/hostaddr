@@ -364,9 +364,9 @@ impl core::fmt::Write for Buffer {
 
 #[cfg(feature = "serde")]
 const _: () = {
-  use core::fmt::Write;
-
+  #[cfg(any(feature = "std", feature = "alloc"))]
   use either::Either;
+
   use serde::{Deserialize, Serialize};
 
   use super::Domain;
@@ -392,29 +392,37 @@ const _: () = {
       if deserializer.is_human_readable() {
         let s = <&str>::deserialize(deserializer)?;
 
-        let res = Domain::try_from_str(s).map_err(serde::de::Error::custom)?;
-        match res {
-          Either::Left(d) => {
-            let mut buf = Self::new();
-            buf.write_str(d.0).map_err(serde::de::Error::custom)?;
-            Ok(buf)
-          }
-          Either::Right(d) => Ok(d),
+        #[cfg(any(feature = "std", feature = "alloc"))]
+        {
+          let res = Domain::try_from_str(s).map_err(serde::de::Error::custom)?;
+
+          Ok(match res {
+            Either::Left(d) => Self::copy_from_slice(d.0.as_bytes()),
+            Either::Right(d) => d,
+          })
+        }
+
+        #[cfg(not(any(feature = "std", feature = "alloc")))]
+        {
+          let res = Domain::try_from_ascii_str(s).map_err(serde::de::Error::custom)?;
+          Ok(Self::copy_from_slice(res.0.as_bytes()))
         }
       } else {
         let bytes = <&[u8]>::deserialize(deserializer)?;
 
-        let res = Domain::try_from_bytes(bytes).map_err(serde::de::Error::custom)?;
-        match res {
-          Either::Left(d) => {
-            let mut buf = Self::new();
-            // SAFETY: Valid domains are guaranteed to be valid UTF-8.
-            buf
-              .write_str(unsafe { core::str::from_utf8_unchecked(d.0) })
-              .map_err(serde::de::Error::custom)?;
-            Ok(buf)
-          }
-          Either::Right(d) => Ok(d),
+        #[cfg(any(feature = "std", feature = "alloc"))]
+        {
+          let res = Domain::try_from_bytes(bytes).map_err(serde::de::Error::custom)?;
+          Ok(match res {
+            Either::Left(d) => Self::copy_from_slice(d.0),
+            Either::Right(d) => d,
+          })
+        }
+
+        #[cfg(not(any(feature = "std", feature = "alloc")))]
+        {
+          let res = Domain::try_from_ascii_bytes(bytes).map_err(serde::de::Error::custom)?;
+          Ok(Self::copy_from_slice(&res.0))
         }
       }
     }

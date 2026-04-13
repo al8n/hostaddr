@@ -59,9 +59,10 @@ where
   S: core::fmt::Display,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    match self.port {
-      Some(port) => write!(f, "{}:{}", self.host, port),
-      None => write!(f, "{}", self.host),
+    match (self.host.is_ipv6(), self.port) {
+      (true, Some(port)) => write!(f, "[{}]:{}", self.host, port),
+      (_, Some(port)) => write!(f, "{}:{}", self.host, port),
+      _ => write!(f, "{}", self.host),
     }
   }
 }
@@ -288,8 +289,7 @@ impl<S> From<HostAddr<S>> for HostAddr<Domain<S>> {
     let (host, port) = value.into_components();
     match host {
       Host::Domain(domain) => Self {
-        // Safety: the ways to construct a valid HostAddr guarantee the domain must be valid.
-        host: Host::Domain(unsafe { Domain::new_unchecked(domain) }),
+        host: Host::Domain(Domain::new_unchecked(domain)),
         port,
       },
       Host::Ip(ip) => Self {
@@ -318,8 +318,7 @@ impl<'a, S> From<&'a HostAddr<S>> for HostAddr<&'a Domain<S>> {
     let (host, port) = value.as_ref().into_components();
     match host {
       Host::Domain(domain) => Self {
-        // Safety: the ways to construct a valid HostAddr guarantee the domain must be valid.
-        host: Host::Domain(unsafe { Domain::from_ref_unchecked(domain) }),
+        host: Host::Domain(Domain::from_ref_unchecked(domain)),
         port,
       },
       Host::Ip(ip) => Self {
@@ -1289,5 +1288,33 @@ mod tests {
   fn negative_try_from_ascii_str() {
     let err = HostAddr::try_from_ascii_str("example.com:aaa").unwrap_err();
     assert!(matches!(err, ParseAsciiHostAddrError::Port(_)));
+  }
+
+  /// Regression test: IPv6 with port must display as `[::1]:port`, not `::1:port`.
+  /// The old output was ambiguous and could not be parsed back.
+  #[test]
+  #[cfg(feature = "std")]
+  fn ipv6_display_roundtrip() {
+    let addr = HostAddr::<&str>::from_sock_addr("[::1]:8080".parse().unwrap());
+    assert_eq!(addr.to_string(), "[::1]:8080");
+
+    // Without port, no brackets
+    let addr = HostAddr::<&str>::from_ip_addr("::1".parse().unwrap());
+    assert_eq!(addr.to_string(), "::1");
+
+    // IPv4 unchanged
+    let addr = HostAddr::<&str>::from_sock_addr("127.0.0.1:3000".parse().unwrap());
+    assert_eq!(addr.to_string(), "127.0.0.1:3000");
+
+    // Roundtrip: display then parse
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    {
+      use std::string::String;
+      let addr = HostAddr::<String>::from_sock_addr("[::1]:443".parse().unwrap());
+      let displayed = addr.to_string();
+      let reparsed: HostAddr<String> = displayed.parse().unwrap();
+      assert_eq!(reparsed.port(), Some(443));
+      assert!(reparsed.is_ipv6());
+    }
   }
 }
