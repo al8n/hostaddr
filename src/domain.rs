@@ -1150,7 +1150,7 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
 /// Verifies that the input is a valid ASCII domain name. The input
 /// can be a percent-encoded domain name.
 ///
-/// This function is more restrictive than [`verify_domain`] as it only accepts
+/// This function is more restrictive than `verify_domain` as it only accepts
 /// ASCII domain names (including punycode). It will reject international domain
 /// names in their Unicode form.
 ///
@@ -1165,7 +1165,7 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
 ///
 /// ## Invalid Inputs
 ///
-/// - International domains in Unicode form: `测试.中国` (use [`verify_domain`] instead)
+/// - International domains in Unicode form: `测试.中国` (use `verify_domain` instead)
 /// - Invalid characters: `exam ple.com`
 ///
 /// ## Example
@@ -1224,7 +1224,7 @@ pub fn verify_ascii_domain_allow_percent_encoding(
 ///
 /// This is the most restrictive verification function. It only accepts plain ASCII
 /// domain names without percent-encoding. Use [`verify_ascii_domain_allow_percent_encoding`]
-/// if you need to support percent-encoded domains, or [`verify_domain`] for international
+/// if you need to support percent-encoded domains, or `verify_domain` for international
 /// domains.
 ///
 /// ## Valid Inputs
@@ -1238,7 +1238,7 @@ pub fn verify_ascii_domain_allow_percent_encoding(
 /// ## Invalid Inputs
 ///
 /// - Percent-encoded domains: `example%2Ecom` (use [`verify_ascii_domain_allow_percent_encoding`])
-/// - International domains: `测试.中国` (use [`verify_domain`])
+/// - International domains: `测试.中国` (use `verify_domain`)
 /// - All-numeric labels: `123.456` (invalid DNS name)
 /// - Labels starting/ending with hyphen: `-example.com`, `example-.com`
 /// - Empty labels: `example..com`

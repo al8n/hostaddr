@@ -35,6 +35,7 @@ All types are generic over their storage backend `S`, allowing you to choose the
 - **Type-safe validation**: Domain names are validated at construction time per RFC 1035 rules
 - **Percent-encoding**: Transparent decoding of percent-encoded domains
 - **IPv4/IPv6**: Full support for IP addresses, including proper `[::1]:port` bracket syntax
+- **Transport taxonomy**: `Addr`, `IpcAddr`, `LocalAddr`, and `LoopbackAddr` model host, IPC, and local-only addresses
 - **Serde**: Optional serialization/deserialization support
 - **Fuzzing**: Built-in `arbitrary` and `quickcheck` generators for property-based testing
 
@@ -50,6 +51,7 @@ hostaddr = "0.2"
 | Feature | Description |
 |---------|-------------|
 | **`std`** (default) | Standard library support, enables IDNA and percent-decoding |
+| **`vsock`** (default) | VM socket address support through `VsockAddr` and `IpcAddr::Vsock` |
 | **`alloc`** | Allocation support without `std` |
 | **`serde`** | Serialize/deserialize support |
 | **`arbitrary`** | Fuzzing with `arbitrary` crate |
@@ -81,6 +83,30 @@ assert_eq!(addr.to_string(), "[::1]:443");
 
 // International domain names (auto punycode)
 let addr: HostAddr<String> = "测试.中国:80".parse().unwrap();
+```
+
+## Address Taxonomy
+
+`Addr` separates Internet host addresses from IPC transports while preserving
+generic storage for each address family. `LocalAddr::Loopback` is validated as a
+loopback IP socket address, while `LocalAddr::Ipc` groups non-IP IPC transport
+addresses without treating every IPC endpoint as a same-machine trust boundary.
+
+The transparent IPC wrappers support borrowed DST storage such as
+`&UnixAddr<Path>` and `&AbstractAddr<[u8]>`. `VsockAddr` support is available
+through the default-enabled `vsock` feature.
+
+```rust,ignore
+use hostaddr::{Addr, HostAddr, IpcAddr, LocalAddr, LoopbackAddr, UnixAddr, VsockAddr};
+
+let host = HostAddr::<&str>::from(("127.0.0.1".parse().unwrap(), 8080));
+let addr: Addr<&str, &str, &[u8]> = host.into();
+
+let unix: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
+let local_ip = LoopbackAddr::try_from("127.0.0.1:8080".parse().unwrap()).unwrap();
+let local: LocalAddr<&str, &[u8]> = local_ip.into();
+
+let vsock = VsockAddr::new(3, 1024);
 ```
 
 ## Examples
@@ -173,4 +199,3 @@ Copyright (c) 2026 Al Liu.
 [doc-url]: https://docs.rs/hostaddr
 [crates-url]: https://crates.io/crates/hostaddr
 [codecov-url]: https://app.codecov.io/gh/al8n/hostaddr/
-
