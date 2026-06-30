@@ -13,10 +13,12 @@ extern crate std;
 pub use addr::*;
 pub use domain::*;
 pub use host::*;
+pub use ipc::*;
 
 mod addr;
 mod domain;
 mod host;
+mod ipc;
 
 #[cfg(any(
   all(feature = "arbitrary", any(feature = "std", feature = "alloc")),

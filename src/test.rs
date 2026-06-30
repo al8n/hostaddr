@@ -397,7 +397,7 @@ fn test_domain_length_boundary() {
   assert!(Domain::<String>::try_from(d.as_str()).is_ok());
 
   // 254 bytes with trailing dot (FQDN) - valid
-  let fqdn = format!("{}.", &d);
+  let fqdn = format!("{}.", d);
   assert_eq!(fqdn.len(), 254);
   assert!(Domain::<String>::try_from(fqdn.as_str()).is_ok());
 

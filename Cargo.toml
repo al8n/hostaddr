@@ -12,7 +12,8 @@ categories = ["network-programming", "parser-implementations", "no-std", "no-std
 keywords = ["dns", "domain", "hostname", "host", "address"]
 
 [features]
-default = ["std"]
+default = ["std", "vsock"]
+vsock = []
 alloc = [
   "idna/alloc",
   "idna/compiled_data",
