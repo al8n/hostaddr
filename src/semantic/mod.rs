@@ -11,54 +11,6 @@ use iprfc::{
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "serde")]
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-enum SocketAddrRepr {
-  V4 {
-    ip: Ipv4Addr,
-    port: u16,
-  },
-  V6 {
-    ip: Ipv6Addr,
-    port: u16,
-    flowinfo: u32,
-    scope_id: u32,
-  },
-}
-
-#[cfg(feature = "serde")]
-impl SocketAddrRepr {
-  #[inline]
-  fn from_socket_addr(addr: SocketAddr) -> Self {
-    match addr {
-      SocketAddr::V4(addr) => Self::V4 {
-        ip: *addr.ip(),
-        port: addr.port(),
-      },
-      SocketAddr::V6(addr) => Self::V6 {
-        ip: *addr.ip(),
-        port: addr.port(),
-        flowinfo: addr.flowinfo(),
-        scope_id: addr.scope_id(),
-      },
-    }
-  }
-
-  #[inline]
-  fn into_socket_addr(self) -> SocketAddr {
-    match self {
-      Self::V4 { ip, port } => SocketAddr::V4(SocketAddrV4::new(ip, port)),
-      Self::V6 {
-        ip,
-        port,
-        flowinfo,
-        scope_id,
-      } => SocketAddr::V6(SocketAddrV6::new(ip, port, flowinfo, scope_id)),
-    }
-  }
-}
-
 macro_rules! semantic_addr_class {
   (
     ip: $ip_name:ident, $ip_error:ident, $ip_doc:literal, $ip_error_doc:literal, $ip_error_msg:literal;
@@ -174,7 +126,11 @@ macro_rules! semantic_addr_class {
       where
         S: serde::Serializer,
       {
-        SocketAddrRepr::from_socket_addr(self.0).serialize(serializer)
+        if serializer.is_human_readable() {
+          serializer.collect_str(&self.0)
+        } else {
+          serde::Serialize::serialize(&self.0, serializer)
+        }
       }
     }
 
@@ -185,7 +141,14 @@ macro_rules! semantic_addr_class {
       where
         D: serde::Deserializer<'de>,
       {
-        let addr = SocketAddrRepr::deserialize(deserializer)?.into_socket_addr();
+        let addr = if deserializer.is_human_readable() {
+          let addr = <&str as serde::Deserialize>::deserialize(deserializer)?;
+          addr
+            .parse::<SocketAddr>()
+            .map_err(serde::de::Error::custom)?
+        } else {
+          <SocketAddr as serde::Deserialize>::deserialize(deserializer)?
+        };
         Self::new(addr).map_err(serde::de::Error::custom)
       }
     }

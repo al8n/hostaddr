@@ -334,6 +334,30 @@ fn ipc_serde_uses_stable_tags() {
   }
 }
 
+#[cfg(all(feature = "serde", unix))]
+#[test]
+fn ipc_serde_uses_numeric_tags_for_binary_formats() {
+  let ipc: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
+  let serialized = bincode::serialize(&ipc).unwrap();
+  assert_eq!(serialized.first().copied(), Some(0));
+  let deserialized: IpcAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  assert_eq!(deserialized, ipc);
+
+  let addr: Addr<&str, &str, &[u8]> = ipc.into();
+  let serialized = bincode::serialize(&addr).unwrap();
+  assert_eq!(serialized.first().copied(), Some(1));
+  assert_eq!(serialized.get(1).copied(), Some(0));
+  let deserialized: Addr<&str, &str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  assert_eq!(deserialized, addr);
+
+  let local: LocalAddr<&str, &[u8]> = ipc.into();
+  let serialized = bincode::serialize(&local).unwrap();
+  assert_eq!(serialized.first().copied(), Some(1));
+  assert_eq!(serialized.get(1).copied(), Some(0));
+  let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  assert_eq!(deserialized, local);
+}
+
 #[cfg(all(feature = "serde", not(windows)))]
 #[test]
 fn ipc_serde_rejects_unsupported_tags() {
