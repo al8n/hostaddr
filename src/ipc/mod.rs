@@ -485,18 +485,21 @@ struct LocalAddrVisitor<P, A> {
 struct LocalAddrVariantVisitor;
 
 #[cfg(feature = "serde")]
+#[derive(Clone, Copy)]
 enum LocalAddrVariant {
   Loopback,
   Ipc,
 }
 
 #[cfg(feature = "serde")]
+#[derive(Clone, Copy)]
 enum AddrVariant {
   Host,
   Ipc,
 }
 
 #[cfg(feature = "serde")]
+#[derive(Clone, Copy)]
 enum IpcAddrTag {
   Unix,
   Abstract,
@@ -510,10 +513,47 @@ const _: () = {
   use core::marker::PhantomData;
   use serde::{
     de::{self, EnumAccess, VariantAccess as _, Visitor},
+    ser::SerializeTuple,
     Deserialize, Deserializer, Serialize, Serializer,
   };
 
   const IPC_ADDR_VARIANTS: &[&str] = &["unix", "abstract", "named_pipe", "vsock"];
+
+  impl IpcAddrTag {
+    #[inline]
+    const fn as_str(self) -> &'static str {
+      match self {
+        Self::Unix => "unix",
+        Self::Abstract => "abstract",
+        Self::NamedPipe => "named_pipe",
+        Self::Vsock => "vsock",
+      }
+    }
+
+    #[inline]
+    const fn as_u8(self) -> u8 {
+      match self {
+        Self::Unix => 0,
+        Self::Abstract => 1,
+        Self::NamedPipe => 2,
+        Self::Vsock => 3,
+      }
+    }
+  }
+
+  impl Serialize for IpcAddrTag {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer,
+    {
+      if serializer.is_human_readable() {
+        serializer.serialize_str((*self).as_str())
+      } else {
+        serializer.serialize_u8((*self).as_u8())
+      }
+    }
+  }
 
   impl<'de> Deserialize<'de> for IpcAddrTag {
     #[inline]
@@ -521,7 +561,11 @@ const _: () = {
     where
       D: Deserializer<'de>,
     {
-      deserializer.deserialize_str(IpcAddrTagVisitor)
+      if deserializer.is_human_readable() {
+        deserializer.deserialize_str(IpcAddrTagVisitor)
+      } else {
+        deserializer.deserialize_u8(IpcAddrTagVisitor)
+      }
     }
   }
 
@@ -560,6 +604,44 @@ const _: () = {
         _ => Err(E::invalid_value(de::Unexpected::Bytes(value), &self)),
       }
     }
+
+    #[inline]
+    fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      self.visit_u64(u64::from(value))
+    }
+
+    #[inline]
+    fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      self.visit_u64(u64::from(value))
+    }
+
+    #[inline]
+    fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      self.visit_u64(u64::from(value))
+    }
+
+    #[inline]
+    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      match value {
+        0 => Ok(IpcAddrTag::Unix),
+        1 => Ok(IpcAddrTag::Abstract),
+        2 => Ok(IpcAddrTag::NamedPipe),
+        3 => Ok(IpcAddrTag::Vsock),
+        _ => Err(E::invalid_value(de::Unexpected::Unsigned(value), &self)),
+      }
+    }
   }
 
   #[cfg(target_os = "linux")]
@@ -573,21 +655,19 @@ const _: () = {
     where
       S: Serializer,
     {
-      use serde::ser::SerializeTuple;
-
       let mut tuple = serializer.serialize_tuple(2)?;
       match self {
         Self::Unix(addr) => {
-          tuple.serialize_element("unix")?;
+          tuple.serialize_element(&IpcAddrTag::Unix)?;
           tuple.serialize_element(addr.as_inner())?;
         }
         Self::Abstract(addr) => {
-          tuple.serialize_element("abstract")?;
+          tuple.serialize_element(&IpcAddrTag::Abstract)?;
           tuple.serialize_element(addr.as_inner())?;
         }
         #[cfg(feature = "vsock")]
         Self::Vsock(addr) => {
-          tuple.serialize_element("vsock")?;
+          tuple.serialize_element(&IpcAddrTag::Vsock)?;
           tuple.serialize_element(addr)?;
         }
       }
@@ -605,12 +685,10 @@ const _: () = {
     where
       S: Serializer,
     {
-      use serde::ser::SerializeTuple;
-
       let mut tuple = serializer.serialize_tuple(2)?;
       match self {
         Self::Unix(addr) => {
-          tuple.serialize_element("unix")?;
+          tuple.serialize_element(&IpcAddrTag::Unix)?;
           tuple.serialize_element(addr.as_inner())?;
         }
         Self::__NonExhaustive(never, _) => match *never {},
@@ -629,12 +707,10 @@ const _: () = {
     where
       S: Serializer,
     {
-      use serde::ser::SerializeTuple;
-
       let mut tuple = serializer.serialize_tuple(2)?;
       match self {
         Self::NamedPipe(addr) => {
-          tuple.serialize_element("named_pipe")?;
+          tuple.serialize_element(&IpcAddrTag::NamedPipe)?;
           tuple.serialize_element(addr.as_inner())?;
         }
         Self::__NonExhaustive(never, _) => match *never {},
@@ -895,6 +971,38 @@ const _: () = {
 
   const ADDR_VARIANTS: &[&str] = &["host", "ipc"];
 
+  impl AddrVariant {
+    #[inline]
+    const fn as_str(self) -> &'static str {
+      match self {
+        Self::Host => "host",
+        Self::Ipc => "ipc",
+      }
+    }
+
+    #[inline]
+    const fn as_u8(self) -> u8 {
+      match self {
+        Self::Host => 0,
+        Self::Ipc => 1,
+      }
+    }
+  }
+
+  impl Serialize for AddrVariant {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer,
+    {
+      if serializer.is_human_readable() {
+        serializer.serialize_str((*self).as_str())
+      } else {
+        serializer.serialize_u8((*self).as_u8())
+      }
+    }
+  }
+
   impl<H, P, A> Serialize for Addr<H, P, A>
   where
     HostAddr<H>: Serialize,
@@ -905,9 +1013,24 @@ const _: () = {
     where
       S: Serializer,
     {
-      match self {
-        Self::Host(addr) => serializer.serialize_newtype_variant("Addr", 0, "host", addr),
-        Self::Ipc(addr) => serializer.serialize_newtype_variant("Addr", 1, "ipc", addr),
+      if serializer.is_human_readable() {
+        match self {
+          Self::Host(addr) => serializer.serialize_newtype_variant("Addr", 0, "host", addr),
+          Self::Ipc(addr) => serializer.serialize_newtype_variant("Addr", 1, "ipc", addr),
+        }
+      } else {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        match self {
+          Self::Host(addr) => {
+            tuple.serialize_element(&AddrVariant::Host)?;
+            tuple.serialize_element(addr)?;
+          }
+          Self::Ipc(addr) => {
+            tuple.serialize_element(&AddrVariant::Ipc)?;
+            tuple.serialize_element(addr)?;
+          }
+        }
+        tuple.end()
       }
     }
   }
@@ -922,7 +1045,11 @@ const _: () = {
     where
       D: Deserializer<'de>,
     {
-      deserializer.deserialize_enum("Addr", ADDR_VARIANTS, AddrVisitor::new())
+      if deserializer.is_human_readable() {
+        deserializer.deserialize_enum("Addr", ADDR_VARIANTS, AddrVisitor::new())
+      } else {
+        deserializer.deserialize_tuple(2, AddrVisitor::new())
+      }
     }
   }
 
@@ -932,7 +1059,11 @@ const _: () = {
     where
       D: Deserializer<'de>,
     {
-      deserializer.deserialize_identifier(AddrVariantVisitor)
+      if deserializer.is_human_readable() {
+        deserializer.deserialize_identifier(AddrVariantVisitor)
+      } else {
+        deserializer.deserialize_u8(AddrVariantVisitor)
+      }
     }
   }
 
@@ -1026,7 +1157,7 @@ const _: () = {
 
     #[inline]
     fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-      formatter.write_str("an externally tagged address")
+      formatter.write_str("an externally tagged address or two-element address tuple")
     }
 
     #[inline]
@@ -1038,6 +1169,27 @@ const _: () = {
       match variant {
         AddrVariant::Host => access.newtype_variant().map(Addr::Host),
         AddrVariant::Ipc => access.newtype_variant().map(Addr::Ipc),
+      }
+    }
+
+    #[inline]
+    fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+    where
+      S: de::SeqAccess<'de>,
+    {
+      let tag: AddrVariant = seq
+        .next_element()?
+        .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+
+      match tag {
+        AddrVariant::Host => seq
+          .next_element()?
+          .map(Addr::Host)
+          .ok_or_else(|| de::Error::invalid_length(1, &self)),
+        AddrVariant::Ipc => seq
+          .next_element()?
+          .map(Addr::Ipc)
+          .ok_or_else(|| de::Error::invalid_length(1, &self)),
       }
     }
   }
@@ -1060,7 +1212,7 @@ const _: () = {
 
     #[inline]
     fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-      formatter.write_str("an externally tagged local address")
+      formatter.write_str("an externally tagged local address or two-element local-address tuple")
     }
 
     #[inline]
@@ -1074,9 +1226,62 @@ const _: () = {
         LocalAddrVariant::Ipc => access.newtype_variant().map(LocalAddr::Ipc),
       }
     }
+
+    #[inline]
+    fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+    where
+      S: de::SeqAccess<'de>,
+    {
+      let tag: LocalAddrVariant = seq
+        .next_element()?
+        .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+
+      match tag {
+        LocalAddrVariant::Loopback => seq
+          .next_element()?
+          .map(LocalAddr::Loopback)
+          .ok_or_else(|| de::Error::invalid_length(1, &self)),
+        LocalAddrVariant::Ipc => seq
+          .next_element()?
+          .map(LocalAddr::Ipc)
+          .ok_or_else(|| de::Error::invalid_length(1, &self)),
+      }
+    }
   }
 
   const LOCAL_ADDR_VARIANTS: &[&str] = &["loopback", "ipc"];
+
+  impl LocalAddrVariant {
+    #[inline]
+    const fn as_str(self) -> &'static str {
+      match self {
+        Self::Loopback => "loopback",
+        Self::Ipc => "ipc",
+      }
+    }
+
+    #[inline]
+    const fn as_u8(self) -> u8 {
+      match self {
+        Self::Loopback => 0,
+        Self::Ipc => 1,
+      }
+    }
+  }
+
+  impl Serialize for LocalAddrVariant {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer,
+    {
+      if serializer.is_human_readable() {
+        serializer.serialize_str((*self).as_str())
+      } else {
+        serializer.serialize_u8((*self).as_u8())
+      }
+    }
+  }
 
   impl<P, A> Serialize for LocalAddr<P, A>
   where
@@ -1088,11 +1293,26 @@ const _: () = {
     where
       S: Serializer,
     {
-      match self {
-        Self::Loopback(addr) => {
-          serializer.serialize_newtype_variant("LocalAddr", 0, "loopback", addr)
+      if serializer.is_human_readable() {
+        match self {
+          Self::Loopback(addr) => {
+            serializer.serialize_newtype_variant("LocalAddr", 0, "loopback", addr)
+          }
+          Self::Ipc(addr) => serializer.serialize_newtype_variant("LocalAddr", 1, "ipc", addr),
         }
-        Self::Ipc(addr) => serializer.serialize_newtype_variant("LocalAddr", 1, "ipc", addr),
+      } else {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        match self {
+          Self::Loopback(addr) => {
+            tuple.serialize_element(&LocalAddrVariant::Loopback)?;
+            tuple.serialize_element(addr)?;
+          }
+          Self::Ipc(addr) => {
+            tuple.serialize_element(&LocalAddrVariant::Ipc)?;
+            tuple.serialize_element(addr)?;
+          }
+        }
+        tuple.end()
       }
     }
   }
@@ -1107,7 +1327,11 @@ const _: () = {
     where
       D: Deserializer<'de>,
     {
-      deserializer.deserialize_enum("LocalAddr", LOCAL_ADDR_VARIANTS, LocalAddrVisitor::new())
+      if deserializer.is_human_readable() {
+        deserializer.deserialize_enum("LocalAddr", LOCAL_ADDR_VARIANTS, LocalAddrVisitor::new())
+      } else {
+        deserializer.deserialize_tuple(2, LocalAddrVisitor::new())
+      }
     }
   }
 
@@ -1117,7 +1341,11 @@ const _: () = {
     where
       D: Deserializer<'de>,
     {
-      deserializer.deserialize_identifier(LocalAddrVariantVisitor)
+      if deserializer.is_human_readable() {
+        deserializer.deserialize_identifier(LocalAddrVariantVisitor)
+      } else {
+        deserializer.deserialize_u8(LocalAddrVariantVisitor)
+      }
     }
   }
 

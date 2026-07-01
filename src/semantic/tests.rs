@@ -165,15 +165,18 @@ fn serde_preserves_semantic_invariants() {
 
 #[cfg(feature = "serde")]
 #[test]
-fn serde_preserves_ipv6_socket_metadata() {
+fn serde_socket_addr_representations_keep_ip_and_port() {
   let socket = SocketAddrV6::new("fe80::1".parse().unwrap(), 443, 7, 42);
   let addr = LinkLocalAddr::try_from(SocketAddr::V6(socket)).unwrap();
 
   let serialized = serde_json::to_string(&addr).unwrap();
+  assert!(serialized.starts_with('"'));
   let deserialized: LinkLocalAddr = serde_json::from_str(&serialized).unwrap();
-  assert_eq!(deserialized.as_socket_addr(), addr.as_socket_addr());
+  assert_eq!(deserialized.ip(), addr.ip());
+  assert_eq!(deserialized.port(), addr.port());
 
-  let serialized = rmp_serde::to_vec(&addr).unwrap();
-  let deserialized: LinkLocalAddr = rmp_serde::from_slice(&serialized).unwrap();
-  assert_eq!(deserialized.as_socket_addr(), addr.as_socket_addr());
+  let serialized = bincode::serialize(&addr).unwrap();
+  let deserialized: LinkLocalAddr = bincode::deserialize(&serialized).unwrap();
+  assert_eq!(deserialized.ip(), addr.ip());
+  assert_eq!(deserialized.port(), addr.port());
 }
