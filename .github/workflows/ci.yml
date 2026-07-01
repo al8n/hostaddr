@@ -177,8 +177,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install Rust
         run: rustup update nightly && rustup default nightly
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
       - name: Cache cargo build and registry
         uses: actions/cache@v5
         with:
@@ -189,10 +189,8 @@ jobs:
           key: ${{ runner.os }}-coverage-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-coverage-
-      - name: Run tarpaulin
-        env:
-          RUSTFLAGS: "--cfg tarpaulin"
-        run: cargo tarpaulin --engine llvm --all-features --run-types lib --run-types tests --run-types doctests --workspace --out xml
+      - name: Run llvm-cov
+        run: cargo llvm-cov --all-features --workspace --doctests --lcov --output-path lcov.info --fail-under-lines 95
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v6
         with:

@@ -519,6 +519,49 @@ mod tests {
     );
   }
 
+  #[cfg(any(feature = "std", feature = "alloc"))]
+  #[test]
+  fn semantic_wrappers_cover_conversion_traits_and_display() {
+    use crate::std::string::ToString as _;
+
+    let ip_v4 = Ipv4Addr::new(127, 0, 0, 1);
+    let ip_v6 = Ipv6Addr::LOCALHOST;
+
+    let loopback_v4 = LoopbackIpAddr::try_from(ip_v4).unwrap();
+    assert_eq!(loopback_v4.to_string(), "127.0.0.1");
+    assert_eq!(IpAddr::from(loopback_v4), IpAddr::V4(ip_v4));
+
+    let loopback_v6 = LoopbackIpAddr::try_from(ip_v6).unwrap();
+    assert_eq!(loopback_v6.into_ip_addr(), IpAddr::V6(ip_v6));
+    assert_eq!(
+      LoopbackIpAddr::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)))
+        .unwrap_err()
+        .as_str(),
+      "not a loopback IP address"
+    );
+
+    let socket_v4 = SocketAddrV4::new(ip_v4, 8080);
+    let loopback_addr_v4 = LoopbackAddr::try_from(socket_v4).unwrap();
+    assert_eq!(loopback_addr_v4.to_string(), "127.0.0.1:8080");
+    assert_eq!(
+      SocketAddr::from(loopback_addr_v4),
+      SocketAddr::V4(socket_v4)
+    );
+
+    let socket_v6 = SocketAddrV6::new(ip_v6, 443, 7, 42);
+    let loopback_addr_v6 = LoopbackAddr::try_from(socket_v6).unwrap();
+    assert_eq!(
+      loopback_addr_v6.into_socket_addr(),
+      SocketAddr::V6(socket_v6)
+    );
+    assert_eq!(
+      LoopbackAddr::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)), 80))
+        .unwrap_err()
+        .as_str(),
+      "not a loopback socket address"
+    );
+  }
+
   #[cfg(feature = "serde")]
   #[test]
   fn serde_preserves_semantic_invariants() {

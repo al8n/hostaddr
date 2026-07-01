@@ -1331,6 +1331,169 @@ mod tests {
 
   #[cfg(feature = "serde")]
   #[test]
+  fn serde_visitors_accept_supported_tag_forms() {
+    use serde::de::Visitor as _;
+
+    type Error = serde::de::value::Error;
+
+    assert!(matches!(
+      AddrVariantVisitor.visit_str::<Error>("host").unwrap(),
+      AddrVariant::Host
+    ));
+    assert!(matches!(
+      AddrVariantVisitor.visit_str::<Error>("ipc").unwrap(),
+      AddrVariant::Ipc
+    ));
+    assert!(AddrVariantVisitor.visit_str::<Error>("other").is_err());
+    assert!(matches!(
+      AddrVariantVisitor.visit_bytes::<Error>(b"host").unwrap(),
+      AddrVariant::Host
+    ));
+    assert!(matches!(
+      AddrVariantVisitor.visit_bytes::<Error>(b"ipc").unwrap(),
+      AddrVariant::Ipc
+    ));
+    assert!(AddrVariantVisitor.visit_bytes::<Error>(b"other").is_err());
+    assert!(AddrVariantVisitor.visit_bytes::<Error>(b"\xff").is_err());
+    assert!(matches!(
+      AddrVariantVisitor.visit_u8::<Error>(0).unwrap(),
+      AddrVariant::Host
+    ));
+    assert!(matches!(
+      AddrVariantVisitor.visit_u16::<Error>(1).unwrap(),
+      AddrVariant::Ipc
+    ));
+    assert!(matches!(
+      AddrVariantVisitor.visit_u32::<Error>(0).unwrap(),
+      AddrVariant::Host
+    ));
+    assert!(AddrVariantVisitor.visit_u64::<Error>(2).is_err());
+
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_str::<Error>("unix").unwrap(),
+      IpcAddrTag::Unix
+    ));
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_str::<Error>("abstract").unwrap(),
+      IpcAddrTag::Abstract
+    ));
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_str::<Error>("named_pipe").unwrap(),
+      IpcAddrTag::NamedPipe
+    ));
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_str::<Error>("vsock").unwrap(),
+      IpcAddrTag::Vsock
+    ));
+    assert!(IpcAddrTagVisitor.visit_str::<Error>("other").is_err());
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_bytes::<Error>(b"unix").unwrap(),
+      IpcAddrTag::Unix
+    ));
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_bytes::<Error>(b"abstract").unwrap(),
+      IpcAddrTag::Abstract
+    ));
+    assert!(matches!(
+      IpcAddrTagVisitor
+        .visit_bytes::<Error>(b"named_pipe")
+        .unwrap(),
+      IpcAddrTag::NamedPipe
+    ));
+    assert!(matches!(
+      IpcAddrTagVisitor.visit_bytes::<Error>(b"vsock").unwrap(),
+      IpcAddrTag::Vsock
+    ));
+    assert!(IpcAddrTagVisitor.visit_bytes::<Error>(b"other").is_err());
+
+    assert!(matches!(
+      LocalAddrVariantVisitor
+        .visit_str::<Error>("loopback")
+        .unwrap(),
+      LocalAddrVariant::Loopback
+    ));
+    assert!(matches!(
+      LocalAddrVariantVisitor.visit_str::<Error>("ipc").unwrap(),
+      LocalAddrVariant::Ipc
+    ));
+    assert!(LocalAddrVariantVisitor.visit_str::<Error>("other").is_err());
+    assert!(matches!(
+      LocalAddrVariantVisitor
+        .visit_bytes::<Error>(b"loopback")
+        .unwrap(),
+      LocalAddrVariant::Loopback
+    ));
+    assert!(matches!(
+      LocalAddrVariantVisitor
+        .visit_bytes::<Error>(b"ipc")
+        .unwrap(),
+      LocalAddrVariant::Ipc
+    ));
+    assert!(LocalAddrVariantVisitor
+      .visit_bytes::<Error>(b"other")
+      .is_err());
+    assert!(LocalAddrVariantVisitor
+      .visit_bytes::<Error>(b"\xff")
+      .is_err());
+    assert!(matches!(
+      LocalAddrVariantVisitor.visit_u8::<Error>(0).unwrap(),
+      LocalAddrVariant::Loopback
+    ));
+    assert!(matches!(
+      LocalAddrVariantVisitor.visit_u16::<Error>(1).unwrap(),
+      LocalAddrVariant::Ipc
+    ));
+    assert!(matches!(
+      LocalAddrVariantVisitor.visit_u32::<Error>(0).unwrap(),
+      LocalAddrVariant::Loopback
+    ));
+    assert!(LocalAddrVariantVisitor.visit_u64::<Error>(2).is_err());
+
+    let _ = <Error as serde::de::Error>::invalid_type(
+      serde::de::Unexpected::Unit,
+      &AddrVisitor::<&str, &str, &[u8]>::new(),
+    );
+    let _ = <Error as serde::de::Error>::invalid_length(0, &IpcAddrVisitor::<&str, &[u8]>::new());
+    let _ = <Error as serde::de::Error>::invalid_type(
+      serde::de::Unexpected::Unit,
+      &LocalAddrVisitor::<&str, &[u8]>::new(),
+    );
+  }
+
+  #[cfg(feature = "serde")]
+  #[test]
+  fn serde_roundtrips_host_and_loopback_wrappers() {
+    let host = HostAddr::<&str>::from(("127.0.0.1".parse::<IpAddr>().unwrap(), 8080));
+    let addr: Addr<&str, &str, &[u8]> = host.into();
+    let serialized = serde_json::to_string(&addr).unwrap();
+    assert!(serialized.contains("\"host\""));
+    let deserialized: Addr<&str, &str, &[u8]> = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized, addr);
+
+    let loopback = LoopbackAddr::try_from("127.0.0.1:8080".parse::<SocketAddr>().unwrap()).unwrap();
+    let local: LocalAddr<&str, &[u8]> = loopback.into();
+    let serialized = serde_json::to_string(&local).unwrap();
+    assert!(serialized.contains("\"loopback\""));
+    let deserialized: LocalAddr<&str, &[u8]> = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized, local);
+  }
+
+  #[cfg(all(unix, any(feature = "std", feature = "alloc")))]
+  #[test]
+  fn unix_addr_conversion_helpers_preserve_inner_path() {
+    let unix = UnixAddr::new(crate::std::string::String::from("/tmp/app.sock"));
+    assert_eq!(unix.as_deref().as_inner(), &"/tmp/app.sock");
+    assert_eq!(unix.into_inner(), "/tmp/app.sock");
+
+    let unix: UnixAddr<&str> = UnixAddr::from("/tmp/app.sock");
+    assert_eq!(
+      *core::borrow::Borrow::<&str>::borrow(&unix),
+      "/tmp/app.sock"
+    );
+  }
+
+  #[cfg(feature = "serde")]
+  #[test]
   fn ipc_serde_uses_stable_tags() {
     #[cfg(unix)]
     {
