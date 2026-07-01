@@ -2,6 +2,7 @@
 use std::path::Path;
 
 use crate::{HostAddr, LoopbackAddr};
+#[cfg(any(feature = "serde", not(target_os = "linux")))]
 use core::marker::PhantomData;
 
 #[cfg(test)]
