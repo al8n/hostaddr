@@ -429,17 +429,14 @@ const _: () = {
   }
 };
 
-#[cfg(test)]
-mod test {
-  #[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
-  #[test]
-  fn test_ord() {
-    use super::*;
+#[cfg(any(feature = "std", feature = "alloc", feature = "serde"))]
+#[test]
+fn test_ord() {
+  use super::*;
 
-    let a = Buffer::copy_from_str("a");
-    let b = Buffer::copy_from_str("b");
-    assert!(a < b);
+  let a = Buffer::copy_from_str("a");
+  let b = Buffer::copy_from_str("b");
+  assert!(a < b);
 
-    assert!(a.partial_cmp(&b) == Some(core::cmp::Ordering::Less));
-  }
+  assert!(a.partial_cmp(&b) == Some(core::cmp::Ordering::Less));
 }

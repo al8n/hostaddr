@@ -4,6 +4,7 @@ codecov:
 ignore:
   - src/arbitrary_impl.rs
   - src/quickcheck_impl.rs
+  - "**/tests.rs"
   - fuzz/
 coverage:
   status:
