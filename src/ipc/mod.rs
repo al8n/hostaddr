@@ -181,7 +181,7 @@ impl<P> From<P> for UnixAddr<P> {
 #[cfg_attr(docsrs, doc(cfg(windows)))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct NamedPipeAddr<P: ?Sized>(P);
 
