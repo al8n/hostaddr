@@ -60,6 +60,7 @@ arbitrary = ["dep:arbitrary", "smol_str_0_3?/arbitrary", "tinyvec_1?/arbitrary",
 [dependencies]
 derive_more = { version = "2", features = ["display", "from", "is_variant", "unwrap", "try_unwrap", "as_ref"] }
 either = { version = "1", default-features = false }
+iprfc = { version = "0.2", default-features = false }
 memchr = { version = "2", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 simdutf8 = { version = "0.1", default-features = false }
@@ -84,6 +85,7 @@ quickcheck = "1"
 quickcheck_macros = "1"
 arbitrary = "1"
 paste = "1"
+bincode = "1"
 serde_json = "1"
 serde = { version = "1", features = ["rc"] }
 rmp-serde = "1"

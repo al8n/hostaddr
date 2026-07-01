@@ -1,9 +1,9 @@
-use core::net::{IpAddr, SocketAddr};
-
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", any(unix, windows)))]
 use std::path::Path;
 
-use crate::HostAddr;
+use crate::{HostAddr, LoopbackAddr};
+#[cfg(feature = "serde")]
+use serde::de::VariantAccess as _;
 
 /// Any address accepted by a runtime.
 ///
@@ -13,8 +13,6 @@ use crate::HostAddr;
 /// Enum variants store their payloads by value, so DST storage is represented
 /// through sized references such as `Addr<&str, &Path, &[u8]>`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Addr<H, P, A> {
   /// A DNS/IP host address.
   Host(HostAddr<H>),
@@ -36,29 +34,618 @@ impl<H, P, A> From<IpcAddr<P, A>> for Addr<H, P, A> {
   }
 }
 
+#[cfg(feature = "serde")]
+const ADDR_VARIANTS: &[&str] = &["host", "ipc"];
+
+#[cfg(feature = "serde")]
+type AddrVisitorMarker<H, P, A> = core::marker::PhantomData<fn() -> (H, P, A)>;
+
+#[cfg(feature = "serde")]
+impl<H, P, A> serde::Serialize for Addr<H, P, A>
+where
+  HostAddr<H>: serde::Serialize,
+  IpcAddr<P, A>: serde::Serialize,
+{
+  #[inline]
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    match self {
+      Self::Host(addr) => serializer.serialize_newtype_variant("Addr", 0, "host", addr),
+      Self::Ipc(addr) => serializer.serialize_newtype_variant("Addr", 1, "ipc", addr),
+    }
+  }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, H, P, A> serde::Deserialize<'de> for Addr<H, P, A>
+where
+  HostAddr<H>: serde::Deserialize<'de>,
+  IpcAddr<P, A>: serde::Deserialize<'de>,
+{
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_enum("Addr", ADDR_VARIANTS, AddrVisitor::new())
+  }
+}
+
+#[cfg(feature = "serde")]
+enum AddrVariant {
+  Host,
+  Ipc,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for AddrVariant {
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_identifier(AddrVariantVisitor)
+  }
+}
+
+#[cfg(feature = "serde")]
+struct AddrVariantVisitor;
+
+#[cfg(feature = "serde")]
+impl serde::de::Visitor<'_> for AddrVariantVisitor {
+  type Value = AddrVariant;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("an address kind")
+  }
+
+  #[inline]
+  fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      "host" => Ok(AddrVariant::Host),
+      "ipc" => Ok(AddrVariant::Ipc),
+      _ => Err(E::unknown_variant(value, ADDR_VARIANTS)),
+    }
+  }
+
+  #[inline]
+  fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      b"host" => Ok(AddrVariant::Host),
+      b"ipc" => Ok(AddrVariant::Ipc),
+      _ => match core::str::from_utf8(value) {
+        Ok(value) => Err(E::unknown_variant(value, ADDR_VARIANTS)),
+        Err(_) => Err(E::invalid_value(serde::de::Unexpected::Bytes(value), &self)),
+      },
+    }
+  }
+
+  #[inline]
+  fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    self.visit_u64(u64::from(value))
+  }
+
+  #[inline]
+  fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    self.visit_u64(u64::from(value))
+  }
+
+  #[inline]
+  fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    self.visit_u64(u64::from(value))
+  }
+
+  #[inline]
+  fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      0 => Ok(AddrVariant::Host),
+      1 => Ok(AddrVariant::Ipc),
+      _ => Err(E::invalid_value(
+        serde::de::Unexpected::Unsigned(value),
+        &self,
+      )),
+    }
+  }
+}
+
+#[cfg(feature = "serde")]
+struct AddrVisitor<H, P, A> {
+  marker: AddrVisitorMarker<H, P, A>,
+}
+
+#[cfg(feature = "serde")]
+impl<H, P, A> AddrVisitor<H, P, A> {
+  #[inline]
+  const fn new() -> Self {
+    Self {
+      marker: core::marker::PhantomData,
+    }
+  }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, H, P, A> serde::de::Visitor<'de> for AddrVisitor<H, P, A>
+where
+  HostAddr<H>: serde::Deserialize<'de>,
+  IpcAddr<P, A>: serde::Deserialize<'de>,
+{
+  type Value = Addr<H, P, A>;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("an externally tagged address")
+  }
+
+  #[inline]
+  fn visit_enum<E>(self, data: E) -> Result<Self::Value, E::Error>
+  where
+    E: serde::de::EnumAccess<'de>,
+  {
+    let (variant, access) = data.variant()?;
+    match variant {
+      AddrVariant::Host => access.newtype_variant().map(Addr::Host),
+      AddrVariant::Ipc => access.newtype_variant().map(Addr::Ipc),
+    }
+  }
+}
+
 /// A non-IP communication address.
 ///
 /// Path-backed transports use `P`, and byte-backed transports use `A`. The
-/// type intentionally does not contain [`HostAddr`] or [`SocketAddr`].
+/// type intentionally does not contain [`HostAddr`] or [`core::net::SocketAddr`].
 ///
 /// Enum variants store their payloads by value, so DST storage is represented
 /// through sized references such as `IpcAddr<&Path, &[u8]>`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[non_exhaustive]
 pub enum IpcAddr<P, A> {
   /// A Unix-domain socket pathname.
+  #[cfg(unix)]
+  #[cfg_attr(docsrs, doc(cfg(unix)))]
   Unix(UnixAddr<P>),
   /// A Linux abstract socket name, without the leading NUL byte.
+  #[cfg(target_os = "linux")]
+  #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
   Abstract(AbstractAddr<A>),
   /// A Windows named-pipe pathname.
+  #[cfg(windows)]
+  #[cfg_attr(docsrs, doc(cfg(windows)))]
   NamedPipe(NamedPipeAddr<P>),
   /// A VM socket address.
-  #[cfg(feature = "vsock")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "vsock")))]
+  #[cfg(all(feature = "vsock", target_os = "linux"))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "vsock", target_os = "linux"))))]
   Vsock(VsockAddr),
+  #[doc(hidden)]
+  #[cfg(any(not(any(unix, windows)), not(target_os = "linux")))]
+  __NonExhaustive(
+    core::convert::Infallible,
+    core::marker::PhantomData<fn() -> (P, A)>,
+  ),
 }
 
+#[cfg(feature = "serde")]
+const IPC_ADDR_VARIANTS: &[&str] = &["unix", "abstract", "named_pipe", "vsock"];
+
+#[cfg(feature = "serde")]
+enum IpcAddrTag {
+  Unix,
+  Abstract,
+  NamedPipe,
+  Vsock,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for IpcAddrTag {
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_str(IpcAddrTagVisitor)
+  }
+}
+
+#[cfg(feature = "serde")]
+struct IpcAddrTagVisitor;
+
+#[cfg(feature = "serde")]
+impl serde::de::Visitor<'_> for IpcAddrTagVisitor {
+  type Value = IpcAddrTag;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("an IPC address kind")
+  }
+
+  #[inline]
+  fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      "unix" => Ok(IpcAddrTag::Unix),
+      "abstract" => Ok(IpcAddrTag::Abstract),
+      "named_pipe" => Ok(IpcAddrTag::NamedPipe),
+      "vsock" => Ok(IpcAddrTag::Vsock),
+      _ => Err(E::unknown_variant(value, IPC_ADDR_VARIANTS)),
+    }
+  }
+
+  #[inline]
+  fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      b"unix" => Ok(IpcAddrTag::Unix),
+      b"abstract" => Ok(IpcAddrTag::Abstract),
+      b"named_pipe" => Ok(IpcAddrTag::NamedPipe),
+      b"vsock" => Ok(IpcAddrTag::Vsock),
+      _ => Err(E::invalid_value(serde::de::Unexpected::Bytes(value), &self)),
+    }
+  }
+}
+
+#[cfg(all(feature = "serde", target_os = "linux"))]
+impl<P, A> serde::Serialize for IpcAddr<P, A>
+where
+  P: serde::Serialize,
+  A: serde::Serialize,
+{
+  #[inline]
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    use serde::ser::SerializeTuple;
+
+    let mut tuple = serializer.serialize_tuple(2)?;
+    match self {
+      Self::Unix(addr) => {
+        tuple.serialize_element("unix")?;
+        tuple.serialize_element(addr.as_inner())?;
+      }
+      Self::Abstract(addr) => {
+        tuple.serialize_element("abstract")?;
+        tuple.serialize_element(addr.as_inner())?;
+      }
+      #[cfg(feature = "vsock")]
+      Self::Vsock(addr) => {
+        tuple.serialize_element("vsock")?;
+        tuple.serialize_element(addr)?;
+      }
+    }
+    tuple.end()
+  }
+}
+
+#[cfg(all(feature = "serde", unix, not(target_os = "linux")))]
+impl<P, A> serde::Serialize for IpcAddr<P, A>
+where
+  P: serde::Serialize,
+{
+  #[inline]
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    use serde::ser::SerializeTuple;
+
+    let mut tuple = serializer.serialize_tuple(2)?;
+    match self {
+      Self::Unix(addr) => {
+        tuple.serialize_element("unix")?;
+        tuple.serialize_element(addr.as_inner())?;
+      }
+      Self::__NonExhaustive(never, _) => match *never {},
+    }
+    tuple.end()
+  }
+}
+
+#[cfg(all(feature = "serde", windows))]
+impl<P, A> serde::Serialize for IpcAddr<P, A>
+where
+  P: serde::Serialize,
+{
+  #[inline]
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    use serde::ser::SerializeTuple;
+
+    let mut tuple = serializer.serialize_tuple(2)?;
+    match self {
+      Self::NamedPipe(addr) => {
+        tuple.serialize_element("named_pipe")?;
+        tuple.serialize_element(addr.as_inner())?;
+      }
+      Self::__NonExhaustive(never, _) => match *never {},
+    }
+    tuple.end()
+  }
+}
+
+#[cfg(all(feature = "serde", not(unix), not(windows)))]
+impl<P, A> serde::Serialize for IpcAddr<P, A> {
+  #[inline]
+  fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    match self {
+      Self::__NonExhaustive(never, _) => match *never {},
+    }
+  }
+}
+
+#[cfg(all(feature = "serde", target_os = "linux"))]
+impl<'de, P, A> serde::Deserialize<'de> for IpcAddr<P, A>
+where
+  P: serde::Deserialize<'de>,
+  A: serde::Deserialize<'de>,
+{
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_tuple(2, IpcAddrVisitor::new())
+  }
+}
+
+#[cfg(all(feature = "serde", unix, not(target_os = "linux")))]
+impl<'de, P, A> serde::Deserialize<'de> for IpcAddr<P, A>
+where
+  P: serde::Deserialize<'de>,
+{
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_tuple(2, IpcAddrVisitor::new())
+  }
+}
+
+#[cfg(all(feature = "serde", windows))]
+impl<'de, P, A> serde::Deserialize<'de> for IpcAddr<P, A>
+where
+  P: serde::Deserialize<'de>,
+{
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_tuple(2, IpcAddrVisitor::new())
+  }
+}
+
+#[cfg(all(feature = "serde", not(unix), not(windows)))]
+impl<'de, P, A> serde::Deserialize<'de> for IpcAddr<P, A> {
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_tuple(2, IpcAddrVisitor::new())
+  }
+}
+
+#[cfg(feature = "serde")]
+struct IpcAddrVisitor<P, A> {
+  marker: core::marker::PhantomData<fn() -> (P, A)>,
+}
+
+#[cfg(feature = "serde")]
+impl<P, A> IpcAddrVisitor<P, A> {
+  #[inline]
+  const fn new() -> Self {
+    Self {
+      marker: core::marker::PhantomData,
+    }
+  }
+}
+
+#[cfg(all(feature = "serde", target_os = "linux"))]
+impl<'de, P, A> serde::de::Visitor<'de> for IpcAddrVisitor<P, A>
+where
+  P: serde::Deserialize<'de>,
+  A: serde::Deserialize<'de>,
+{
+  type Value = IpcAddr<P, A>;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("a two-element IPC address tuple")
+  }
+
+  #[inline]
+  fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+  where
+    S: serde::de::SeqAccess<'de>,
+  {
+    let tag: IpcAddrTag = seq
+      .next_element()?
+      .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+    match tag {
+      IpcAddrTag::Unix => {
+        let value = seq
+          .next_element()?
+          .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+        Ok(IpcAddr::Unix(UnixAddr::new(value)))
+      }
+      IpcAddrTag::Abstract => {
+        let value = seq
+          .next_element()?
+          .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+        Ok(IpcAddr::Abstract(AbstractAddr::new(value)))
+      }
+      IpcAddrTag::NamedPipe => Err(serde::de::Error::custom(
+        "Windows named-pipe IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::Vsock => {
+        #[cfg(feature = "vsock")]
+        {
+          let value = seq
+            .next_element()?
+            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+          Ok(IpcAddr::Vsock(value))
+        }
+        #[cfg(not(feature = "vsock"))]
+        {
+          Err(serde::de::Error::custom(
+            "VM socket IPC addresses require the vsock feature on Linux",
+          ))
+        }
+      }
+    }
+  }
+}
+
+#[cfg(all(feature = "serde", unix, not(target_os = "linux")))]
+impl<'de, P, A> serde::de::Visitor<'de> for IpcAddrVisitor<P, A>
+where
+  P: serde::Deserialize<'de>,
+{
+  type Value = IpcAddr<P, A>;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("a two-element IPC address tuple")
+  }
+
+  #[inline]
+  fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+  where
+    S: serde::de::SeqAccess<'de>,
+  {
+    let tag: IpcAddrTag = seq
+      .next_element()?
+      .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+    match tag {
+      IpcAddrTag::Unix => {
+        let value = seq
+          .next_element()?
+          .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+        Ok(IpcAddr::Unix(UnixAddr::new(value)))
+      }
+      IpcAddrTag::Abstract => Err(serde::de::Error::custom(
+        "Linux abstract IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::NamedPipe => Err(serde::de::Error::custom(
+        "Windows named-pipe IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::Vsock => Err(serde::de::Error::custom(
+        "VM socket IPC addresses require the vsock feature on Linux",
+      )),
+    }
+  }
+}
+
+#[cfg(all(feature = "serde", windows))]
+impl<'de, P, A> serde::de::Visitor<'de> for IpcAddrVisitor<P, A>
+where
+  P: serde::Deserialize<'de>,
+{
+  type Value = IpcAddr<P, A>;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("a two-element IPC address tuple")
+  }
+
+  #[inline]
+  fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+  where
+    S: serde::de::SeqAccess<'de>,
+  {
+    let tag: IpcAddrTag = seq
+      .next_element()?
+      .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+    match tag {
+      IpcAddrTag::Unix => Err(serde::de::Error::custom(
+        "Unix IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::Abstract => Err(serde::de::Error::custom(
+        "Linux abstract IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::NamedPipe => {
+        let value = seq
+          .next_element()?
+          .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+        Ok(IpcAddr::NamedPipe(NamedPipeAddr::new(value)))
+      }
+      IpcAddrTag::Vsock => Err(serde::de::Error::custom(
+        "VM socket IPC addresses require the vsock feature on Linux",
+      )),
+    }
+  }
+}
+
+#[cfg(all(feature = "serde", not(unix), not(windows)))]
+impl<'de, P, A> serde::de::Visitor<'de> for IpcAddrVisitor<P, A> {
+  type Value = IpcAddr<P, A>;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("a two-element IPC address tuple")
+  }
+
+  #[inline]
+  fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+  where
+    S: serde::de::SeqAccess<'de>,
+  {
+    let tag: IpcAddrTag = seq
+      .next_element()?
+      .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+    match tag {
+      IpcAddrTag::Unix => Err(serde::de::Error::custom(
+        "Unix IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::Abstract => Err(serde::de::Error::custom(
+        "Linux abstract IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::NamedPipe => Err(serde::de::Error::custom(
+        "Windows named-pipe IPC addresses are unsupported on this target",
+      )),
+      IpcAddrTag::Vsock => Err(serde::de::Error::custom(
+        "VM socket IPC addresses require the vsock feature on Linux",
+      )),
+    }
+  }
+}
+
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(unix)))]
 impl<P, A> From<UnixAddr<P>> for IpcAddr<P, A> {
   #[inline]
   fn from(value: UnixAddr<P>) -> Self {
@@ -66,6 +653,8 @@ impl<P, A> From<UnixAddr<P>> for IpcAddr<P, A> {
   }
 }
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl<P, A> From<AbstractAddr<A>> for IpcAddr<P, A> {
   #[inline]
   fn from(value: AbstractAddr<A>) -> Self {
@@ -73,6 +662,8 @@ impl<P, A> From<AbstractAddr<A>> for IpcAddr<P, A> {
   }
 }
 
+#[cfg(windows)]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 impl<P, A> From<NamedPipeAddr<P>> for IpcAddr<P, A> {
   #[inline]
   fn from(value: NamedPipeAddr<P>) -> Self {
@@ -80,8 +671,8 @@ impl<P, A> From<NamedPipeAddr<P>> for IpcAddr<P, A> {
   }
 }
 
-#[cfg(feature = "vsock")]
-#[cfg_attr(docsrs, doc(cfg(feature = "vsock")))]
+#[cfg(all(feature = "vsock", target_os = "linux"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "vsock", target_os = "linux"))))]
 impl<P, A> From<VsockAddr> for IpcAddr<P, A> {
   #[inline]
   fn from(value: VsockAddr) -> Self {
@@ -90,12 +681,16 @@ impl<P, A> From<VsockAddr> for IpcAddr<P, A> {
 }
 
 /// A Unix-domain socket pathname.
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(unix)))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct UnixAddr<P: ?Sized>(P);
 
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(unix)))]
 impl<P> UnixAddr<P> {
   /// Creates a Unix-domain socket address from path storage.
   #[inline]
@@ -110,6 +705,8 @@ impl<P> UnixAddr<P> {
   }
 }
 
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(unix)))]
 impl<P: ?Sized> UnixAddr<P> {
   /// Converts a reference to path storage into a borrowed Unix-domain socket address.
   #[inline]
@@ -141,7 +738,8 @@ impl<P: ?Sized> UnixAddr<P> {
   }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", unix))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "std", unix))))]
 impl<P: ?Sized> UnixAddr<P>
 where
   P: AsRef<Path>,
@@ -153,7 +751,8 @@ where
   }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", unix))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "std", unix))))]
 impl UnixAddr<Path> {
   /// Converts a filesystem path reference into a borrowed Unix-domain socket address.
   #[inline]
@@ -162,6 +761,8 @@ impl UnixAddr<Path> {
   }
 }
 
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(unix)))]
 impl<P: ?Sized> core::borrow::Borrow<P> for UnixAddr<P> {
   #[inline]
   fn borrow(&self) -> &P {
@@ -169,6 +770,8 @@ impl<P: ?Sized> core::borrow::Borrow<P> for UnixAddr<P> {
   }
 }
 
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(unix)))]
 impl<P> From<P> for UnixAddr<P> {
   #[inline]
   fn from(value: P) -> Self {
@@ -177,12 +780,16 @@ impl<P> From<P> for UnixAddr<P> {
 }
 
 /// A Windows named-pipe pathname.
+#[cfg(windows)]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct NamedPipeAddr<P: ?Sized>(P);
 
+#[cfg(windows)]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 impl<P> NamedPipeAddr<P> {
   /// Creates a Windows named-pipe address from path storage.
   #[inline]
@@ -197,6 +804,8 @@ impl<P> NamedPipeAddr<P> {
   }
 }
 
+#[cfg(windows)]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 impl<P: ?Sized> NamedPipeAddr<P> {
   /// Converts a reference to path storage into a borrowed named-pipe address.
   #[inline]
@@ -228,7 +837,8 @@ impl<P: ?Sized> NamedPipeAddr<P> {
   }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", windows))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "std", windows))))]
 impl<P: ?Sized> NamedPipeAddr<P>
 where
   P: AsRef<Path>,
@@ -240,7 +850,8 @@ where
   }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", windows))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "std", windows))))]
 impl NamedPipeAddr<Path> {
   /// Converts a filesystem path reference into a borrowed named-pipe address.
   #[inline]
@@ -249,6 +860,8 @@ impl NamedPipeAddr<Path> {
   }
 }
 
+#[cfg(windows)]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 impl<P: ?Sized> core::borrow::Borrow<P> for NamedPipeAddr<P> {
   #[inline]
   fn borrow(&self) -> &P {
@@ -256,6 +869,8 @@ impl<P: ?Sized> core::borrow::Borrow<P> for NamedPipeAddr<P> {
   }
 }
 
+#[cfg(windows)]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 impl<P> From<P> for NamedPipeAddr<P> {
   #[inline]
   fn from(value: P) -> Self {
@@ -266,12 +881,16 @@ impl<P> From<P> for NamedPipeAddr<P> {
 /// A Linux abstract socket name.
 ///
 /// The stored bytes do not include the leading NUL byte used by the kernel.
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct AbstractAddr<A: ?Sized>(A);
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl<A> AbstractAddr<A> {
   /// Creates an abstract socket address from byte storage.
   #[inline]
@@ -286,6 +905,8 @@ impl<A> AbstractAddr<A> {
   }
 }
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl<A: ?Sized> AbstractAddr<A> {
   /// Converts a reference to byte storage into a borrowed abstract socket address.
   #[inline]
@@ -317,6 +938,8 @@ impl<A: ?Sized> AbstractAddr<A> {
   }
 }
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl<A: ?Sized> AbstractAddr<A>
 where
   A: AsRef<[u8]>,
@@ -328,6 +951,8 @@ where
   }
 }
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl AbstractAddr<[u8]> {
   /// Converts bytes into a borrowed abstract socket address.
   ///
@@ -338,6 +963,8 @@ impl AbstractAddr<[u8]> {
   }
 }
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl<A: ?Sized> core::borrow::Borrow<A> for AbstractAddr<A> {
   #[inline]
   fn borrow(&self) -> &A {
@@ -345,6 +972,8 @@ impl<A: ?Sized> core::borrow::Borrow<A> for AbstractAddr<A> {
   }
 }
 
+#[cfg(target_os = "linux")]
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 impl<A> From<A> for AbstractAddr<A> {
   #[inline]
   fn from(value: A) -> Self {
@@ -353,8 +982,8 @@ impl<A> From<A> for AbstractAddr<A> {
 }
 
 /// A VM socket address.
-#[cfg(feature = "vsock")]
-#[cfg_attr(docsrs, doc(cfg(feature = "vsock")))]
+#[cfg(all(feature = "vsock", target_os = "linux"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "vsock", target_os = "linux"))))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VsockAddr {
@@ -362,8 +991,8 @@ pub struct VsockAddr {
   port: u32,
 }
 
-#[cfg(feature = "vsock")]
-#[cfg_attr(docsrs, doc(cfg(feature = "vsock")))]
+#[cfg(all(feature = "vsock", target_os = "linux"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "vsock", target_os = "linux"))))]
 impl VsockAddr {
   /// Creates a VM socket address from a context identifier and port.
   #[inline]
@@ -384,8 +1013,8 @@ impl VsockAddr {
   }
 }
 
-#[cfg(feature = "vsock")]
-#[cfg_attr(docsrs, doc(cfg(feature = "vsock")))]
+#[cfg(all(feature = "vsock", target_os = "linux"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "vsock", target_os = "linux"))))]
 impl From<(u32, u32)> for VsockAddr {
   #[inline]
   fn from((cid, port): (u32, u32)) -> Self {
@@ -400,8 +1029,6 @@ impl From<(u32, u32)> for VsockAddr {
 /// does not prove that every IPC endpoint target is same-machine or otherwise
 /// safe to use as a trust boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum LocalAddr<P, A> {
   /// A loopback IP socket address.
   Loopback(LoopbackAddr),
@@ -423,130 +1050,227 @@ impl<P, A> From<IpcAddr<P, A>> for LocalAddr<P, A> {
   }
 }
 
-/// A socket address whose IP address is loopback.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[repr(transparent)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(transparent))]
-pub struct LoopbackAddr(SocketAddr);
+#[cfg(feature = "serde")]
+const LOCAL_ADDR_VARIANTS: &[&str] = &["loopback", "ipc"];
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for LoopbackAddr {
+impl<P, A> serde::Serialize for LocalAddr<P, A>
+where
+  LoopbackAddr: serde::Serialize,
+  IpcAddr<P, A>: serde::Serialize,
+{
+  #[inline]
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    match self {
+      Self::Loopback(addr) => {
+        serializer.serialize_newtype_variant("LocalAddr", 0, "loopback", addr)
+      }
+      Self::Ipc(addr) => serializer.serialize_newtype_variant("LocalAddr", 1, "ipc", addr),
+    }
+  }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, P, A> serde::Deserialize<'de> for LocalAddr<P, A>
+where
+  LoopbackAddr: serde::Deserialize<'de>,
+  IpcAddr<P, A>: serde::Deserialize<'de>,
+{
   #[inline]
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where
     D: serde::Deserializer<'de>,
   {
-    let addr = SocketAddr::deserialize(deserializer)?;
-    Self::new(addr).map_err(serde::de::Error::custom)
+    deserializer.deserialize_enum("LocalAddr", LOCAL_ADDR_VARIANTS, LocalAddrVisitor::new())
   }
 }
 
-impl LoopbackAddr {
-  /// Creates a loopback address after validating the IP component.
+#[cfg(feature = "serde")]
+enum LocalAddrVariant {
+  Loopback,
+  Ipc,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for LocalAddrVariant {
   #[inline]
-  pub const fn new(addr: SocketAddr) -> Result<Self, ParseLoopbackAddrError> {
-    if addr.ip().is_loopback() {
-      Ok(Self(addr))
-    } else {
-      Err(ParseLoopbackAddrError(()))
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    deserializer.deserialize_identifier(LocalAddrVariantVisitor)
+  }
+}
+
+#[cfg(feature = "serde")]
+struct LocalAddrVariantVisitor;
+
+#[cfg(feature = "serde")]
+impl serde::de::Visitor<'_> for LocalAddrVariantVisitor {
+  type Value = LocalAddrVariant;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("a local-address kind")
+  }
+
+  #[inline]
+  fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      "loopback" => Ok(LocalAddrVariant::Loopback),
+      "ipc" => Ok(LocalAddrVariant::Ipc),
+      _ => Err(E::unknown_variant(value, LOCAL_ADDR_VARIANTS)),
     }
   }
 
-  /// Returns the inner socket address.
   #[inline]
-  pub const fn as_socket_addr(&self) -> SocketAddr {
-    self.0
+  fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      b"loopback" => Ok(LocalAddrVariant::Loopback),
+      b"ipc" => Ok(LocalAddrVariant::Ipc),
+      _ => match core::str::from_utf8(value) {
+        Ok(value) => Err(E::unknown_variant(value, LOCAL_ADDR_VARIANTS)),
+        Err(_) => Err(E::invalid_value(serde::de::Unexpected::Bytes(value), &self)),
+      },
+    }
   }
 
-  /// Returns the inner socket address by value.
   #[inline]
-  pub const fn into_socket_addr(self) -> SocketAddr {
-    self.0
+  fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    self.visit_u64(u64::from(value))
   }
 
-  /// Returns the loopback IP address.
   #[inline]
-  pub const fn ip(&self) -> IpAddr {
-    self.0.ip()
+  fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    self.visit_u64(u64::from(value))
   }
 
-  /// Returns the socket port.
   #[inline]
-  pub const fn port(&self) -> u16 {
-    self.0.port()
+  fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    self.visit_u64(u64::from(value))
+  }
+
+  #[inline]
+  fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    match value {
+      0 => Ok(LocalAddrVariant::Loopback),
+      1 => Ok(LocalAddrVariant::Ipc),
+      _ => Err(E::invalid_value(
+        serde::de::Unexpected::Unsigned(value),
+        &self,
+      )),
+    }
   }
 }
 
-impl core::fmt::Display for LoopbackAddr {
+#[cfg(feature = "serde")]
+struct LocalAddrVisitor<P, A> {
+  marker: core::marker::PhantomData<fn() -> (P, A)>,
+}
+
+#[cfg(feature = "serde")]
+impl<P, A> LocalAddrVisitor<P, A> {
   #[inline]
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    self.0.fmt(f)
+  const fn new() -> Self {
+    Self {
+      marker: core::marker::PhantomData,
+    }
   }
 }
 
-impl TryFrom<SocketAddr> for LoopbackAddr {
-  type Error = ParseLoopbackAddrError;
+#[cfg(feature = "serde")]
+impl<'de, P, A> serde::de::Visitor<'de> for LocalAddrVisitor<P, A>
+where
+  LoopbackAddr: serde::Deserialize<'de>,
+  IpcAddr<P, A>: serde::Deserialize<'de>,
+{
+  type Value = LocalAddr<P, A>;
 
   #[inline]
-  fn try_from(value: SocketAddr) -> Result<Self, Self::Error> {
-    Self::new(value)
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("an externally tagged local address")
   }
-}
 
-impl From<LoopbackAddr> for SocketAddr {
   #[inline]
-  fn from(value: LoopbackAddr) -> Self {
-    value.into_socket_addr()
-  }
-}
-
-/// The provided socket address is not a loopback address.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("{}", self.as_str())]
-pub struct ParseLoopbackAddrError(());
-
-impl ParseLoopbackAddrError {
-  /// Returns the error message.
-  #[inline]
-  pub const fn as_str(&self) -> &'static str {
-    "not a loopback socket address"
+  fn visit_enum<E>(self, data: E) -> Result<Self::Value, E::Error>
+  where
+    E: serde::de::EnumAccess<'de>,
+  {
+    let (variant, access) = data.variant()?;
+    match variant {
+      LocalAddrVariant::Loopback => access.newtype_variant().map(LocalAddr::Loopback),
+      LocalAddrVariant::Ipc => access.newtype_variant().map(LocalAddr::Ipc),
+    }
   }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use core::net::{IpAddr, SocketAddr};
 
-  #[test]
-  fn loopback_addr_accepts_only_loopback_ips() {
-    let ipv4 = "127.1.2.3:8080".parse::<SocketAddr>().unwrap();
-    let loopback = LoopbackAddr::try_from(ipv4).unwrap();
-    assert_eq!(loopback.ip(), ipv4.ip());
-    assert_eq!(loopback.port(), 8080);
+  #[cfg(all(feature = "serde", any(all(unix, not(target_os = "linux")), windows)))]
+  struct NonSerde;
 
-    let ipv6 = "[::1]:443".parse::<SocketAddr>().unwrap();
-    assert_eq!(LoopbackAddr::new(ipv6).unwrap().as_socket_addr(), ipv6);
+  #[cfg(feature = "serde")]
+  fn assert_bincode_ipc_roundtrip(ipc: IpcAddr<&str, &[u8]>) {
+    let serialized = bincode::serialize(&ipc).unwrap();
+    let deserialized: IpcAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+    assert_eq!(deserialized, ipc);
 
-    let public = "192.0.2.1:8080".parse::<SocketAddr>().unwrap();
-    assert_eq!(
-      LoopbackAddr::try_from(public).unwrap_err().as_str(),
-      "not a loopback socket address"
-    );
+    let addr: Addr<&str, &str, &[u8]> = ipc.into();
+    let serialized = bincode::serialize(&addr).unwrap();
+    let deserialized: Addr<&str, &str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+    assert_eq!(deserialized, addr);
+
+    let local: LocalAddr<&str, &[u8]> = ipc.into();
+    let serialized = bincode::serialize(&local).unwrap();
+    let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+    assert_eq!(deserialized, local);
   }
 
   #[test]
   fn ipc_addresses_preserve_storage() {
-    let unix = UnixAddr::new("/tmp/app.sock");
-    assert_eq!(unix.as_inner(), &"/tmp/app.sock");
+    #[cfg(unix)]
+    {
+      let unix = UnixAddr::new("/tmp/app.sock");
+      assert_eq!(unix.as_inner(), &"/tmp/app.sock");
+    }
 
-    let abstract_addr = AbstractAddr::new(b"app.sock".as_slice());
-    assert_eq!(abstract_addr.as_bytes(), b"app.sock");
+    #[cfg(target_os = "linux")]
+    {
+      let abstract_addr = AbstractAddr::new(b"app.sock".as_slice());
+      assert_eq!(abstract_addr.as_bytes(), b"app.sock");
+    }
 
-    let pipe = NamedPipeAddr::new(r"\\.\pipe\app");
-    assert_eq!(pipe.as_inner(), &r"\\.\pipe\app");
+    #[cfg(windows)]
+    {
+      let pipe = NamedPipeAddr::new(r"\\.\pipe\app");
+      assert_eq!(pipe.as_inner(), &r"\\.\pipe\app");
+    }
 
-    #[cfg(feature = "vsock")]
+    #[cfg(all(feature = "vsock", target_os = "linux"))]
     {
       let vsock = VsockAddr::new(3, 1024);
       assert_eq!(vsock.cid(), 3);
@@ -556,17 +1280,23 @@ mod tests {
 
   #[test]
   fn ipc_wrappers_support_unsized_storage_refs() {
-    let abstract_addr: &AbstractAddr<[u8]> = AbstractAddr::from_bytes(b"app.sock");
-    assert_eq!(abstract_addr.as_bytes(), b"app.sock");
-    assert_eq!(abstract_addr.as_ref().as_inner(), &b"app.sock".as_slice());
+    #[cfg(target_os = "linux")]
+    {
+      let abstract_addr: &AbstractAddr<[u8]> = AbstractAddr::from_bytes(b"app.sock");
+      assert_eq!(abstract_addr.as_bytes(), b"app.sock");
+      assert_eq!(abstract_addr.as_ref().as_inner(), &b"app.sock".as_slice());
+    }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", unix))]
     {
       let unix_path = std::path::Path::new("/tmp/app.sock");
       let unix: &UnixAddr<std::path::Path> = UnixAddr::from_path(unix_path);
       assert_eq!(unix.as_path(), unix_path);
       assert_eq!(unix.as_ref().as_inner(), &unix_path);
+    }
 
+    #[cfg(all(feature = "std", windows))]
+    {
       let pipe_path = std::path::Path::new(r"\\.\pipe\app");
       let pipe: &NamedPipeAddr<std::path::Path> = NamedPipeAddr::from_path(pipe_path);
       assert_eq!(pipe.as_path(), pipe_path);
@@ -580,9 +1310,19 @@ mod tests {
     let addr: Addr<&str, &str, &[u8]> = host.into();
     assert!(matches!(addr, Addr::Host(_)));
 
-    let ipc: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
-    let addr: Addr<&str, &str, &[u8]> = ipc.into();
-    assert!(matches!(addr, Addr::Ipc(IpcAddr::Unix(_))));
+    #[cfg(unix)]
+    {
+      let ipc: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
+      let addr: Addr<&str, &str, &[u8]> = ipc.into();
+      assert!(matches!(addr, Addr::Ipc(IpcAddr::Unix(_))));
+    }
+
+    #[cfg(windows)]
+    {
+      let ipc: IpcAddr<&str, &[u8]> = NamedPipeAddr::new(r"\\.\pipe\app").into();
+      let addr: Addr<&str, &str, &[u8]> = ipc.into();
+      assert!(matches!(addr, Addr::Ipc(IpcAddr::NamedPipe(_))));
+    }
 
     let loopback = LoopbackAddr::try_from("127.0.0.1:8080".parse::<SocketAddr>().unwrap()).unwrap();
     let local: LocalAddr<&str, &[u8]> = loopback.into();
@@ -591,12 +1331,133 @@ mod tests {
 
   #[cfg(feature = "serde")]
   #[test]
-  fn serde_preserves_loopback_invariant() {
-    let loopback = LoopbackAddr::try_from("127.0.0.1:8080".parse::<SocketAddr>().unwrap()).unwrap();
-    let serialized = serde_json::to_string(&loopback).unwrap();
-    let deserialized: LoopbackAddr = serde_json::from_str(&serialized).unwrap();
-    assert_eq!(deserialized, loopback);
+  fn ipc_serde_uses_stable_tags() {
+    #[cfg(unix)]
+    {
+      let ipc: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
+      let serialized = serde_json::to_string(&ipc).unwrap();
+      assert!(serialized.contains("\"unix\""));
+      let deserialized: IpcAddr<&str, &[u8]> = serde_json::from_str(&serialized).unwrap();
+      assert_eq!(deserialized, ipc);
 
-    assert!(serde_json::from_str::<LoopbackAddr>("\"192.0.2.1:8080\"").is_err());
+      let serialized = rmp_serde::to_vec(&ipc).unwrap();
+      let deserialized: IpcAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
+      assert_eq!(deserialized, ipc);
+
+      assert_bincode_ipc_roundtrip(ipc);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      let ipc: IpcAddr<&str, [u8; 8]> = AbstractAddr::new(*b"app.sock").into();
+      let serialized = rmp_serde::to_vec(&ipc).unwrap();
+      let deserialized: IpcAddr<&str, [u8; 8]> = rmp_serde::from_slice(&serialized).unwrap();
+      assert_eq!(deserialized, ipc);
+
+      let serialized = bincode::serialize(&ipc).unwrap();
+      let deserialized: IpcAddr<&str, [u8; 8]> = bincode::deserialize(&serialized).unwrap();
+      assert_eq!(deserialized, ipc);
+
+      let addr: Addr<&str, &str, [u8; 8]> = ipc.into();
+      let serialized = bincode::serialize(&addr).unwrap();
+      let deserialized: Addr<&str, &str, [u8; 8]> = bincode::deserialize(&serialized).unwrap();
+      assert_eq!(deserialized, addr);
+
+      let local: LocalAddr<&str, [u8; 8]> = ipc.into();
+      let serialized = bincode::serialize(&local).unwrap();
+      let deserialized: LocalAddr<&str, [u8; 8]> = bincode::deserialize(&serialized).unwrap();
+      assert_eq!(deserialized, local);
+    }
+
+    #[cfg(windows)]
+    {
+      let borrowed: IpcAddr<&str, &[u8]> = NamedPipeAddr::new(r"\\.\pipe\app").into();
+      let serialized = serde_json::to_string(&borrowed).unwrap();
+      assert!(serialized.contains("\"named_pipe\""));
+
+      #[cfg(any(feature = "std", feature = "alloc"))]
+      {
+        use std::string::String;
+
+        let ipc: IpcAddr<String, &[u8]> = NamedPipeAddr::new(String::from(r"\\.\pipe\app")).into();
+        let serialized = serde_json::to_string(&ipc).unwrap();
+        let deserialized: IpcAddr<String, &[u8]> = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, ipc);
+      }
+
+      assert_bincode_ipc_roundtrip(borrowed);
+    }
+
+    #[cfg(all(feature = "vsock", target_os = "linux"))]
+    {
+      let ipc: IpcAddr<&str, &[u8]> = VsockAddr::new(3, 1024).into();
+      let serialized = serde_json::to_string(&ipc).unwrap();
+      assert!(serialized.contains("\"vsock\""));
+      let deserialized: IpcAddr<&str, &[u8]> = serde_json::from_str(&serialized).unwrap();
+      assert_eq!(deserialized, ipc);
+
+      assert_bincode_ipc_roundtrip(ipc);
+    }
+  }
+
+  #[cfg(all(feature = "serde", not(windows)))]
+  #[test]
+  fn ipc_serde_rejects_unsupported_tags() {
+    assert!(serde_json::from_str::<IpcAddr<&str, &[u8]>>("[\"named_pipe\",\"pipe\"]").is_err());
+
+    #[cfg(not(all(feature = "vsock", target_os = "linux")))]
+    assert!(serde_json::from_str::<IpcAddr<&str, &[u8]>>("[\"vsock\",null]").is_err());
+  }
+
+  #[cfg(all(feature = "serde", unix, not(target_os = "linux")))]
+  #[test]
+  fn ipc_serde_does_not_bound_unavailable_abstract_payload() {
+    let ipc: IpcAddr<&str, NonSerde> = UnixAddr::new("/tmp/app.sock").into();
+    let serialized = serde_json::to_string(&ipc).unwrap();
+    let deserialized: IpcAddr<&str, NonSerde> = serde_json::from_str(&serialized).unwrap();
+    assert!(matches!(deserialized, IpcAddr::Unix(_)));
+
+    let addr: Addr<&str, &str, NonSerde> = IpcAddr::from(UnixAddr::new("/tmp/app.sock")).into();
+    let serialized = serde_json::to_string(&addr).unwrap();
+    let deserialized: Addr<&str, &str, NonSerde> = serde_json::from_str(&serialized).unwrap();
+    assert!(matches!(deserialized, Addr::Ipc(IpcAddr::Unix(_))));
+
+    let local: LocalAddr<&str, NonSerde> = IpcAddr::from(UnixAddr::new("/tmp/app.sock")).into();
+    let serialized = serde_json::to_string(&local).unwrap();
+    let deserialized: LocalAddr<&str, NonSerde> = serde_json::from_str(&serialized).unwrap();
+    assert!(matches!(deserialized, LocalAddr::Ipc(IpcAddr::Unix(_))));
+  }
+
+  #[cfg(all(feature = "serde", windows))]
+  #[test]
+  fn ipc_serde_does_not_bound_unavailable_abstract_payload() {
+    let borrowed: IpcAddr<&str, NonSerde> = NamedPipeAddr::new(r"\\.\pipe\app").into();
+    let serialized = serde_json::to_string(&borrowed).unwrap();
+    assert!(serialized.contains("\"named_pipe\""));
+
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    {
+      use std::string::String;
+
+      let ipc: IpcAddr<String, NonSerde> = NamedPipeAddr::new(String::from(r"\\.\pipe\app")).into();
+      let serialized = serde_json::to_string(&ipc).unwrap();
+      let deserialized: IpcAddr<String, NonSerde> = serde_json::from_str(&serialized).unwrap();
+      assert!(matches!(deserialized, IpcAddr::NamedPipe(_)));
+
+      let addr: Addr<&str, String, NonSerde> =
+        IpcAddr::from(NamedPipeAddr::new(String::from(r"\\.\pipe\app"))).into();
+      let serialized = serde_json::to_string(&addr).unwrap();
+      let deserialized: Addr<&str, String, NonSerde> = serde_json::from_str(&serialized).unwrap();
+      assert!(matches!(deserialized, Addr::Ipc(IpcAddr::NamedPipe(_))));
+
+      let local: LocalAddr<String, NonSerde> =
+        IpcAddr::from(NamedPipeAddr::new(String::from(r"\\.\pipe\app"))).into();
+      let serialized = serde_json::to_string(&local).unwrap();
+      let deserialized: LocalAddr<String, NonSerde> = serde_json::from_str(&serialized).unwrap();
+      assert!(matches!(
+        deserialized,
+        LocalAddr::Ipc(IpcAddr::NamedPipe(_))
+      ));
+    }
   }
 }
