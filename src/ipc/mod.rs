@@ -486,21 +486,21 @@ struct LocalAddrVisitor<P, A> {
 struct LocalAddrVariantVisitor;
 
 #[cfg(feature = "serde")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LocalAddrVariant {
   Loopback,
   Ipc,
 }
 
 #[cfg(feature = "serde")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AddrVariant {
   Host,
   Ipc,
 }
 
 #[cfg(feature = "serde")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum IpcAddrTag {
   Unix,
   Abstract,

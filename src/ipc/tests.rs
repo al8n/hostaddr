@@ -176,6 +176,19 @@ fn serde_visitors_accept_supported_tag_forms() {
     IpcAddrTag::Vsock
   ));
   assert!(IpcAddrTagVisitor.visit_bytes::<Error>(b"other").is_err());
+  assert!(matches!(
+    IpcAddrTagVisitor.visit_u16::<Error>(1).unwrap(),
+    IpcAddrTag::Abstract
+  ));
+  assert!(matches!(
+    IpcAddrTagVisitor.visit_u32::<Error>(2).unwrap(),
+    IpcAddrTag::NamedPipe
+  ));
+  assert!(matches!(
+    IpcAddrTagVisitor.visit_u64::<Error>(3).unwrap(),
+    IpcAddrTag::Vsock
+  ));
+  assert!(IpcAddrTagVisitor.visit_u64::<Error>(4).is_err());
 
   assert!(matches!(
     LocalAddrVariantVisitor
@@ -356,12 +369,68 @@ fn ipc_serde_uses_numeric_tags_for_binary_formats() {
   assert_eq!(serialized.get(1).copied(), Some(0));
   let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
   assert_eq!(deserialized, local);
+
+  let host: Addr<&str, &str, &[u8]> =
+    HostAddr::<&str>::from(("127.0.0.1".parse::<IpAddr>().unwrap(), 8080)).into();
+  let serialized = bincode::serialize(&host).unwrap();
+  assert_eq!(serialized.first().copied(), Some(0));
+  let deserialized: Addr<&str, &str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  assert_eq!(deserialized, host);
+
+  let loopback = LoopbackAddr::try_from("127.0.0.1:8080".parse::<SocketAddr>().unwrap()).unwrap();
+  let local: LocalAddr<&str, &[u8]> = loopback.into();
+  let serialized = bincode::serialize(&local).unwrap();
+  assert_eq!(serialized.first().copied(), Some(0));
+  let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  assert_eq!(deserialized, local);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_private_tags_switch_between_text_and_numbers() {
+  let ipc_tags = [
+    (IpcAddrTag::Unix, "\"unix\"", 0),
+    (IpcAddrTag::Abstract, "\"abstract\"", 1),
+    (IpcAddrTag::NamedPipe, "\"named_pipe\"", 2),
+    (IpcAddrTag::Vsock, "\"vsock\"", 3),
+  ];
+  for (tag, json, number) in ipc_tags {
+    assert_eq!(serde_json::to_string(&tag).unwrap(), json);
+    assert_eq!(bincode::serialize(&tag).unwrap(), [number]);
+    assert_eq!(bincode::deserialize::<IpcAddrTag>(&[number]).unwrap(), tag);
+  }
+
+  let addr_tags = [
+    (AddrVariant::Host, "\"host\"", 0),
+    (AddrVariant::Ipc, "\"ipc\"", 1),
+  ];
+  for (tag, json, number) in addr_tags {
+    assert_eq!(serde_json::to_string(&tag).unwrap(), json);
+    assert_eq!(bincode::serialize(&tag).unwrap(), [number]);
+    assert_eq!(bincode::deserialize::<AddrVariant>(&[number]).unwrap(), tag);
+  }
+
+  let local_tags = [
+    (LocalAddrVariant::Loopback, "\"loopback\"", 0),
+    (LocalAddrVariant::Ipc, "\"ipc\"", 1),
+  ];
+  for (tag, json, number) in local_tags {
+    assert_eq!(serde_json::to_string(&tag).unwrap(), json);
+    assert_eq!(bincode::serialize(&tag).unwrap(), [number]);
+    assert_eq!(
+      bincode::deserialize::<LocalAddrVariant>(&[number]).unwrap(),
+      tag
+    );
+  }
 }
 
 #[cfg(all(feature = "serde", not(windows)))]
 #[test]
 fn ipc_serde_rejects_unsupported_tags() {
   assert!(serde_json::from_str::<IpcAddr<&str, &[u8]>>("[\"named_pipe\",\"pipe\"]").is_err());
+
+  #[cfg(all(unix, not(target_os = "linux")))]
+  assert!(serde_json::from_str::<IpcAddr<&str, &[u8]>>("[\"abstract\",[]]").is_err());
 
   #[cfg(not(all(feature = "vsock", target_os = "linux")))]
   assert!(serde_json::from_str::<IpcAddr<&str, &[u8]>>("[\"vsock\",null]").is_err());
