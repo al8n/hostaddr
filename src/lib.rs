@@ -14,11 +14,13 @@ pub use addr::*;
 pub use domain::*;
 pub use host::*;
 pub use ipc::*;
+pub use semantic::*;
 
 mod addr;
 mod domain;
 mod host;
 mod ipc;
+mod semantic;
 
 #[cfg(any(
   all(feature = "arbitrary", any(feature = "std", feature = "alloc")),

@@ -35,7 +35,8 @@ All types are generic over their storage backend `S`, allowing you to choose the
 - **Type-safe validation**: Domain names are validated at construction time per RFC 1035 rules
 - **Percent-encoding**: Transparent decoding of percent-encoded domains
 - **IPv4/IPv6**: Full support for IP addresses, including proper `[::1]:port` bracket syntax
-- **Transport taxonomy**: `Addr`, `IpcAddr`, `LocalAddr`, and `LoopbackAddr` model host, IPC, and local-only addresses
+- **Semantic IP/socket wrappers**: `LoopbackIpAddr`/`LoopbackAddr`, `PrivateIpAddr`/`PrivateAddr`, and other validated address classes
+- **Transport taxonomy**: `Addr`, `IpcAddr`, and `LocalAddr` model host, IPC, and local-only addresses
 - **Serde**: Optional serialization/deserialization support
 - **Fuzzing**: Built-in `arbitrary` and `quickcheck` generators for property-based testing
 
@@ -51,7 +52,7 @@ hostaddr = "0.2"
 | Feature | Description |
 |---------|-------------|
 | **`std`** (default) | Standard library support, enables IDNA and percent-decoding |
-| **`vsock`** (default) | VM socket address support through `VsockAddr` and `IpcAddr::Vsock` |
+| **`vsock`** (default) | Linux VM socket address support through `VsockAddr` and `IpcAddr::Vsock` |
 | **`alloc`** | Allocation support without `std` |
 | **`serde`** | Serialize/deserialize support |
 | **`arbitrary`** | Fuzzing with `arbitrary` crate |
@@ -92,21 +93,35 @@ generic storage for each address family. `LocalAddr::Loopback` is validated as a
 loopback IP socket address, while `LocalAddr::Ipc` groups non-IP IPC transport
 addresses without treating every IPC endpoint as a same-machine trust boundary.
 
+Semantic address classes are available in IP-only and socket-with-port forms.
+The `*IpAddr` types wrap `core::net::IpAddr`; the matching `*Addr` types wrap
+`core::net::SocketAddr` and validate the socket IP component. Common classes
+include `Loopback`, `Private`, `LinkLocal`, `Documentation`, `Benchmark`,
+`Shared`, `Multicast`, `Unspecified`, and `Broadcast`.
+
 The transparent IPC wrappers support borrowed DST storage such as
-`&UnixAddr<Path>` and `&AbstractAddr<[u8]>`. `VsockAddr` support is available
-through the default-enabled `vsock` feature.
+`&UnixAddr<Path>` on Unix and `&AbstractAddr<[u8]>` on Linux. Windows named-pipe
+addresses are exposed through `NamedPipeAddr`; Linux `VsockAddr` support is
+available through the default-enabled `vsock` feature.
 
-```rust,ignore
-use hostaddr::{Addr, HostAddr, IpcAddr, LocalAddr, LoopbackAddr, UnixAddr, VsockAddr};
+```rust
+use hostaddr::{Addr, HostAddr, LocalAddr, LoopbackAddr, PrivateIpAddr};
 
-let host = HostAddr::<&str>::from(("127.0.0.1".parse().unwrap(), 8080));
+let host = HostAddr::<&str>::from(("127.0.0.1".parse::<core::net::IpAddr>().unwrap(), 8080));
 let addr: Addr<&str, &str, &[u8]> = host.into();
 
-let unix: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
-let local_ip = LoopbackAddr::try_from("127.0.0.1:8080".parse().unwrap()).unwrap();
+let private = PrivateIpAddr::try_from("10.0.0.1".parse::<core::net::IpAddr>().unwrap()).unwrap();
+
+#[cfg(unix)]
+{
+  use hostaddr::{IpcAddr, UnixAddr};
+
+  let unix: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
+}
+
+let local_ip = LoopbackAddr::try_from("127.0.0.1:8080".parse::<core::net::SocketAddr>().unwrap()).unwrap();
 let local: LocalAddr<&str, &[u8]> = local_ip.into();
 
-let vsock = VsockAddr::new(3, 1024);
 ```
 
 ## Examples
