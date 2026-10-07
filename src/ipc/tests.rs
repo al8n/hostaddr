@@ -43,10 +43,49 @@ fn ipc_addresses_preserve_storage() {
 
   #[cfg(all(feature = "vsock", target_os = "linux"))]
   {
-    let vsock = VsockAddr::new(3, 1024);
+    let vsock: VsockAddr = (3, 1024).into();
     assert_eq!(vsock.cid(), 3);
     assert_eq!(vsock.port(), 1024);
   }
+}
+
+#[cfg(all(target_os = "linux", any(feature = "std", feature = "alloc")))]
+#[test]
+fn linux_abstract_addr_owned_accessors_and_conversions() {
+  let payload = std::vec![0, b'a', 0, b'b'];
+  let abstract_addr: AbstractAddr<std::vec::Vec<u8>> = payload.clone().into();
+  let expected = &[0, b'a', 0, b'b'];
+
+  assert_eq!(abstract_addr.as_inner().as_slice(), expected);
+  assert_eq!(abstract_addr.as_bytes(), expected);
+  assert_eq!(abstract_addr.as_deref().as_bytes(), expected);
+  assert_eq!(
+    core::borrow::Borrow::<std::vec::Vec<u8>>::borrow(&abstract_addr).as_slice(),
+    expected
+  );
+  assert_eq!(abstract_addr.into_inner(), payload);
+}
+
+#[cfg(all(feature = "serde", target_os = "linux"))]
+#[test]
+fn linux_abstract_human_serde_roundtrips_through_taxonomy() {
+  let abstract_addr: IpcAddr<&str, [u8; 4]> = AbstractAddr::new([0, b'a', 0, b'b']).into();
+  let serialized = serde_json::to_string(&abstract_addr).unwrap();
+  assert_eq!(serialized, r#"["abstract",[0,97,0,98]]"#);
+  let deserialized: IpcAddr<&str, [u8; 4]> = serde_json::from_str(&serialized).unwrap();
+  assert_eq!(deserialized, abstract_addr);
+
+  let addr: Addr<&str, &str, [u8; 4]> = abstract_addr.into();
+  let serialized = serde_json::to_string(&addr).unwrap();
+  assert_eq!(serialized, r#"{"ipc":["abstract",[0,97,0,98]]}"#);
+  let deserialized: Addr<&str, &str, [u8; 4]> = serde_json::from_str(&serialized).unwrap();
+  assert_eq!(deserialized, addr);
+
+  let local: LocalAddr<&str, [u8; 4]> = abstract_addr.into();
+  let serialized = serde_json::to_string(&local).unwrap();
+  assert_eq!(serialized, r#"{"ipc":["abstract",[0,97,0,98]]}"#);
+  let deserialized: LocalAddr<&str, [u8; 4]> = serde_json::from_str(&serialized).unwrap();
+  assert_eq!(deserialized, local);
 }
 
 #[test]
