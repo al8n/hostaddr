@@ -90,7 +90,7 @@ macro_rules! impl_arbitrary {
       impl<'a> Arbitrary<'a> for Host<$ty> {
         fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
           Ok(if u.arbitrary()? {
-            Host::Domain(<Domain<$ty> as Arbitrary>::arbitrary(u)?.0)
+            Host::Domain(<Domain<$ty> as Arbitrary>::arbitrary(u)?)
           } else {
             Host::Ip(Arbitrary::arbitrary(u)?)
           })

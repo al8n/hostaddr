@@ -209,18 +209,19 @@ fn serde_preserves_semantic_invariants() {
 
 #[cfg(feature = "serde")]
 #[test]
-fn serde_socket_addr_representations_keep_ip_and_port() {
+fn serde_socket_addr_representations_keep_all_ipv6_fields() {
   let socket = SocketAddrV6::new("fe80::1".parse().unwrap(), 443, 7, 42);
   let addr = LinkLocalAddr::try_from(SocketAddr::V6(socket)).unwrap();
 
   let serialized = serde_json::to_string(&addr).unwrap();
-  assert!(serialized.starts_with('"'));
+  assert_eq!(
+    serialized,
+    r#"{"v6":{"ip":"fe80::1","port":443,"flowinfo":7,"scope_id":42}}"#
+  );
   let deserialized: LinkLocalAddr = serde_json::from_str(&serialized).unwrap();
-  assert_eq!(deserialized.ip(), addr.ip());
-  assert_eq!(deserialized.port(), addr.port());
+  assert_eq!(deserialized, addr);
 
   let serialized = bincode::serialize(&addr).unwrap();
   let deserialized: LinkLocalAddr = bincode::deserialize(&serialized).unwrap();
-  assert_eq!(deserialized.ip(), addr.ip());
-  assert_eq!(deserialized.port(), addr.port());
+  assert_eq!(deserialized, addr);
 }

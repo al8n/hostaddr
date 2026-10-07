@@ -20,9 +20,8 @@ mod tests;
 /// Equality, ordering, and hashing preserve the stored domain representation
 /// and are case-sensitive. DNS-insensitive identity is a caller policy.
 ///
-/// `Host::Domain` is a public escape hatch for caller-provided storage and does
-/// not validate that storage. Use parsing or `TryFrom` when validation is
-/// required; callers constructing this variant directly own the invariant.
+/// Domain variants contain a validated [`Domain`], so every safely constructed
+/// `Host` preserves the domain-name invariant.
 #[derive(
   Clone,
   Copy,
@@ -34,16 +33,14 @@ mod tests;
   Hash,
   derive_more::Display,
   derive_more::IsVariant,
-  derive_more::Unwrap,
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[unwrap(ref, ref_mut)]
 pub enum Host<S> {
   /// An IP address
   Ip(IpAddr),
   /// A DNS domain name
-  Domain(S),
+  Domain(Domain<S>),
 }
 
 #[cfg(feature = "serde")]
@@ -67,7 +64,7 @@ where
     match Repr::<S>::deserialize(deserializer)? {
       Repr::Ip(ip) => Ok(Self::Ip(ip)),
       Repr::Domain(domain) => Domain::try_from(domain)
-        .map(|domain| Self::Domain(domain.into_inner()))
+        .map(Self::Domain)
         .map_err(serde::de::Error::custom),
     }
   }
@@ -104,7 +101,7 @@ impl<'a> Host<&'a str> {
     }
 
     Domain::try_from_ascii_str(input)
-      .map(|d| Host::Domain(d.as_ref().0))
+      .map(|d| Host::Domain(Domain::new_unchecked(d.as_inner())))
       .map_err(|_| ParseAsciiHostError(()))
   }
 
@@ -125,7 +122,9 @@ impl<'a> Host<&'a str> {
   pub const fn as_bytes(&self) -> Host<&'a [u8]> {
     match self {
       Self::Ip(ip) => Host::Ip(*ip),
-      Self::Domain(domain) => Host::Domain(domain.as_bytes()),
+      Self::Domain(domain) => {
+        Host::Domain(Domain::<[u8]>::from_ref_unchecked(domain.as_inner().as_bytes()).as_ref())
+      }
     }
   }
 }
@@ -159,7 +158,7 @@ impl<'a> Host<&'a [u8]> {
     }
 
     Domain::try_from_ascii_bytes(input)
-      .map(|d| Host::Domain(d.as_ref().0))
+      .map(|d| Host::Domain(Domain::new_unchecked(d.as_inner())))
       .map_err(|_| ParseAsciiHostError(()))
   }
 
@@ -180,8 +179,8 @@ impl<'a> Host<&'a [u8]> {
   pub const fn as_str(&self) -> Host<&'a str> {
     match self {
       Self::Ip(ip) => Host::Ip(*ip),
-      Self::Domain(domain) => match core::str::from_utf8(domain) {
-        Ok(domain) => Host::Domain(domain),
+      Self::Domain(domain) => match core::str::from_utf8(domain.as_inner()) {
+        Ok(domain) => Host::Domain(Domain::<str>::from_ref_unchecked(domain).as_ref()),
         Err(_) => panic!("A Host<&str> should always be valid UTF-8"),
       },
     }
@@ -199,7 +198,7 @@ impl<S> From<Domain<S>> for Host<S> {
   /// # }
   /// ```
   fn from(value: Domain<S>) -> Self {
-    Self::Domain(value.0)
+    Self::Domain(value)
   }
 }
 
@@ -312,7 +311,7 @@ impl<S> Host<S> {
   #[inline]
   pub const fn as_ref(&self) -> Host<&S> {
     match self {
-      Host::Domain(domain) => Host::Domain(domain),
+      Host::Domain(domain) => Host::Domain(domain.as_ref()),
       Host::Ip(ip) => Host::Ip(*ip),
     }
   }
@@ -340,7 +339,7 @@ impl<S> Host<S> {
     S: core::ops::Deref,
   {
     match self {
-      Host::Domain(domain) => Host::Domain(core::ops::Deref::deref(domain)),
+      Host::Domain(domain) => Host::Domain(domain.as_deref()),
       Host::Ip(ip) => Host::Ip(*ip),
     }
   }
@@ -389,8 +388,74 @@ impl<S> Host<S> {
   #[inline]
   pub const fn domain(&self) -> Option<&S> {
     match self {
+      Host::Domain(domain) => Some(domain.as_inner()),
+      _ => None,
+    }
+  }
+
+  /// Returns the validated domain wrapper when the host is a domain name.
+  #[inline]
+  pub const fn as_domain(&self) -> Option<&Domain<S>> {
+    match self {
       Host::Domain(domain) => Some(domain),
       _ => None,
+    }
+  }
+
+  /// Unwraps the IP address, panicking if the host is a domain name.
+  #[inline]
+  pub fn unwrap_ip(self) -> IpAddr {
+    match self {
+      Self::Ip(ip) => ip,
+      Self::Domain(_) => panic!("called `Host::unwrap_ip()` on a domain value"),
+    }
+  }
+
+  /// Borrows the IP address, panicking if the host is a domain name.
+  #[inline]
+  pub const fn unwrap_ip_ref(&self) -> &IpAddr {
+    match self {
+      Self::Ip(ip) => ip,
+      Self::Domain(_) => panic!("called `Host::unwrap_ip_ref()` on a domain value"),
+    }
+  }
+
+  /// Mutably borrows the IP address, panicking if the host is a domain name.
+  #[inline]
+  pub const fn unwrap_ip_mut(&mut self) -> &mut IpAddr {
+    match self {
+      Self::Ip(ip) => ip,
+      Self::Domain(_) => panic!("called `Host::unwrap_ip_mut()` on a domain value"),
+    }
+  }
+
+  /// Unwraps the domain storage, panicking if the host is an IP address.
+  #[inline]
+  pub fn unwrap_domain(self) -> S {
+    match self {
+      Self::Domain(domain) => domain.into_inner(),
+      Self::Ip(_) => panic!("called `Host::unwrap_domain()` on an IP value"),
+    }
+  }
+
+  /// Borrows the domain storage, panicking if the host is an IP address.
+  #[inline]
+  pub const fn unwrap_domain_ref(&self) -> &S {
+    match self {
+      Self::Domain(domain) => domain.as_inner(),
+      Self::Ip(_) => panic!("called `Host::unwrap_domain_ref()` on an IP value"),
+    }
+  }
+
+  /// Mutably borrows the validated domain wrapper, panicking if the host is an IP address.
+  ///
+  /// The wrapper is returned instead of its storage so safe mutation cannot
+  /// bypass domain validation.
+  #[inline]
+  pub const fn unwrap_domain_mut(&mut self) -> &mut Domain<S> {
+    match self {
+      Self::Domain(domain) => domain,
+      Self::Ip(_) => panic!("called `Host::unwrap_domain_mut()` on an IP value"),
     }
   }
 }
@@ -420,7 +485,7 @@ impl<S> Host<&S> {
     S: Copy,
   {
     match self {
-      Self::Domain(domain) => Host::Domain(*domain),
+      Self::Domain(domain) => Host::Domain(domain.copied()),
       Self::Ip(ip) => Host::Ip(ip),
     }
   }
@@ -449,7 +514,7 @@ impl<S> Host<&S> {
     S: Clone,
   {
     match self {
-      Self::Domain(domain) => Host::Domain(domain.clone()),
+      Self::Domain(domain) => Host::Domain(domain.cloned()),
       Self::Ip(ip) => Host::Ip(ip),
     }
   }
@@ -462,7 +527,7 @@ macro_rules! try_from_str {
     }
 
     $s.$convert()
-      .map(|d: Domain<S>| Host::Domain(d.0))
+      .map(|d: Domain<S>| Host::Domain(d))
       .map_err(|_| ParseHostError(()))
   }};
 }

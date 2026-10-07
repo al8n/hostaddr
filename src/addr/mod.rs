@@ -51,10 +51,8 @@ impl ParseAsciiHostAddrError {
 /// Equality, ordering, and hashing preserve the stored host representation and
 /// are case-sensitive for domain names; the port remains part of the identity.
 ///
-/// `HostAddr::new`, `set_host`, and `with_host` accept caller-provided `Host`
-/// storage directly and do not validate it. Parsing, `TryFrom`, and
-/// `From<Domain<_>>` are the validating entry points; callers using these
-/// methods directly own the domain invariant.
+/// The contained [`Host`] preserves its domain-name invariant across every
+/// safe constructor and mutator.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct HostAddr<S> {
@@ -310,63 +308,6 @@ impl<S> From<Ipv6Addr> for HostAddr<S> {
   }
 }
 
-impl<S> From<HostAddr<S>> for HostAddr<Domain<S>> {
-  /// ```rust
-  /// # #[cfg(any(feature = "std", feature = "alloc"))]
-  /// # {
-  /// use hostaddr::{HostAddr, Domain};
-  /// use std::net::Ipv6Addr;
-  ///
-  /// let ip = "::1".parse::<Ipv6Addr>().unwrap();
-  /// let addr = HostAddr::<String>::from(ip);
-  /// let domain_addr: HostAddr<Domain<String>> = addr.into();
-  /// # }
-  /// ```
-  #[inline]
-  fn from(value: HostAddr<S>) -> Self {
-    let (host, port) = value.into_components();
-    match host {
-      Host::Domain(domain) => Self {
-        host: Host::Domain(Domain::new_unchecked(domain)),
-        port,
-      },
-      Host::Ip(ip) => Self {
-        host: Host::Ip(ip),
-        port,
-      },
-    }
-  }
-}
-
-impl<'a, S> From<&'a HostAddr<S>> for HostAddr<&'a Domain<S>> {
-  /// ```rust
-  /// # #[cfg(any(feature = "std", feature = "alloc"))]
-  /// # {
-  /// use hostaddr::{HostAddr, Domain};
-  /// use std::net::Ipv6Addr;
-  ///
-  /// let ip = "::1".parse::<Ipv6Addr>().unwrap();
-  /// let addr = HostAddr::<String>::from(ip);
-  ///
-  /// let domain_addr: HostAddr<&Domain<String>> = (&addr).into();
-  /// # }
-  /// ```
-  #[inline]
-  fn from(value: &'a HostAddr<S>) -> Self {
-    let (host, port) = value.as_ref().into_components();
-    match host {
-      Host::Domain(domain) => Self {
-        host: Host::Domain(Domain::from_ref_unchecked(domain)),
-        port,
-      },
-      Host::Ip(ip) => Self {
-        host: Host::Ip(ip),
-        port,
-      },
-    }
-  }
-}
-
 impl<S> HostAddr<S> {
   /// Create a new host address
   ///
@@ -402,7 +343,7 @@ impl<S> HostAddr<S> {
   #[inline]
   pub fn from_domain(domain: Domain<S>) -> Self {
     Self {
-      host: Host::Domain(domain.0),
+      host: Host::Domain(domain),
       port: None,
     }
   }
@@ -810,7 +751,7 @@ impl<S> HostAddr<S> {
       Host::Ip(IpAddr::V4(ip)) => ip.is_loopback(),
       Host::Ip(IpAddr::V6(ip)) => ip.is_loopback(),
       Host::Domain(domain) => {
-        let s = domain.as_ref();
+        let s = domain.as_inner().as_ref();
         s.eq_ignore_ascii_case("localhost") || s.eq_ignore_ascii_case("localhost.")
       }
     }

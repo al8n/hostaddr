@@ -43,7 +43,16 @@ fn host_conversions_and_accessors_cover_public_contract() {
   let host = Host::from(domain);
   assert!(host.is_domain());
   assert_eq!(host.domain().map(String::as_str), Some("example.com"));
+  assert_eq!(
+    host.as_domain().map(|domain| domain.as_inner().as_str()),
+    Some("example.com")
+  );
+  assert_eq!(host.unwrap_domain_ref(), "example.com");
   assert!(host.ip().is_none());
+
+  let mut host = host;
+  *host.unwrap_domain_mut() = Domain::try_from("example.org").unwrap();
+  assert_eq!(host.unwrap_domain_ref(), "example.org");
 
   let ip: IpAddr = "127.0.0.1".parse().unwrap();
   let host = Host::<String>::from(ip);
@@ -51,6 +60,7 @@ fn host_conversions_and_accessors_cover_public_contract() {
   assert!(host.is_ipv4());
   assert!(!host.is_ipv6());
   assert_eq!(host.ip().copied(), Some(ip));
+  assert_eq!(host.unwrap_ip_ref(), &ip);
   assert!(host.domain().is_none());
 
   let v4 = Ipv4Addr::new(127, 0, 0, 1);
@@ -91,10 +101,11 @@ fn host_conversions_and_accessors_cover_public_contract() {
 }
 
 #[test]
-#[should_panic(expected = "A Host<&str> should always be valid UTF-8")]
-fn host_bytes_as_str_panics_for_invalid_utf8_domain_storage() {
-  let invalid: Host<&[u8]> = Host::Domain(&[0xff]);
-  let _ = invalid.as_str();
+fn host_domain_variant_requires_validated_storage() {
+  assert!(Domain::<&[u8]>::try_from(&[0xff][..]).is_err());
+  let domain = Domain::<&[u8]>::try_from(&b"example.com"[..]).unwrap();
+  let host = Host::Domain(domain);
+  assert_eq!(host.as_str().unwrap_domain(), "example.com");
 }
 
 #[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
@@ -102,8 +113,16 @@ fn host_bytes_as_str_panics_for_invalid_utf8_domain_storage() {
 fn host_deserialize_validates_and_normalizes_domain_variants() {
   use std::{string::String, vec::Vec};
 
+  #[derive(serde::Serialize)]
+  #[serde(rename_all = "snake_case")]
+  #[allow(dead_code)]
+  enum RawHost<T> {
+    Ip(IpAddr),
+    Domain(T),
+  }
+
   for invalid in ["", "-example.com", "example-.com", "example.123"] {
-    let invalid = Host::Domain(String::from(invalid));
+    let invalid = RawHost::Domain(String::from(invalid));
 
     let json = serde_json::to_string(&invalid).unwrap();
     assert!(serde_json::from_str::<Host<String>>(&json).is_err());
@@ -113,7 +132,7 @@ fn host_deserialize_validates_and_normalizes_domain_variants() {
     assert!(rmp_serde::from_slice::<Host<String>>(&msgpack).is_err());
   }
 
-  let invalid_utf8 = Host::Domain(Vec::from([0xff]));
+  let invalid_utf8 = RawHost::Domain(Vec::from([0xff]));
   let json = serde_json::to_string(&invalid_utf8).unwrap();
   assert!(serde_json::from_str::<Host<Vec<u8>>>(&json).is_err());
   let bincode = bincode::serialize(&invalid_utf8).unwrap();
@@ -125,7 +144,7 @@ fn host_deserialize_validates_and_normalizes_domain_variants() {
     ("example.com", "example.com"),
     ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
   ] {
-    let raw = Host::Domain(String::from(encoded));
+    let raw = RawHost::Domain(String::from(encoded));
 
     let json = serde_json::to_string(&raw).unwrap();
     let host: Host<String> = serde_json::from_str(&json).unwrap();
@@ -145,6 +164,14 @@ fn host_deserialize_validates_and_normalizes_domain_variants() {
 #[test]
 fn cow_host_serde_validates_owned_and_borrowed_storage() {
   use std::{borrow::Cow, fmt::Debug, string::String, vec::Vec};
+
+  #[derive(serde::Serialize)]
+  #[serde(rename_all = "snake_case")]
+  #[allow(dead_code)]
+  enum RawHost<T> {
+    Ip(IpAddr),
+    Domain(T),
+  }
 
   fn assert_roundtrips<T>(value: &T)
   where
@@ -175,7 +202,7 @@ fn cow_host_serde_validates_owned_and_borrowed_storage() {
     assert!(rmp_serde::from_slice::<T>(&msgpack).is_err());
   }
 
-  fn assert_str_normalizes(value: &Host<Cow<'static, str>>, expected: &str) {
+  fn assert_str_normalizes(value: &RawHost<Cow<'static, str>>, expected: &str) {
     let json = serde_json::to_string(value).unwrap();
     let decoded: Host<Cow<'static, str>> = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded.unwrap_domain().as_ref(), expected);
@@ -189,7 +216,7 @@ fn cow_host_serde_validates_owned_and_borrowed_storage() {
     assert_eq!(decoded.unwrap_domain().as_ref(), expected);
   }
 
-  fn assert_bytes_normalizes(value: &Host<Cow<'static, [u8]>>, expected: &[u8]) {
+  fn assert_bytes_normalizes(value: &RawHost<Cow<'static, [u8]>>, expected: &[u8]) {
     let json = serde_json::to_string(value).unwrap();
     let decoded: Host<Cow<'static, [u8]>> = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded.unwrap_domain().as_ref(), expected);
@@ -203,34 +230,40 @@ fn cow_host_serde_validates_owned_and_borrowed_storage() {
     assert_eq!(decoded.unwrap_domain().as_ref(), expected);
   }
 
-  let borrowed: Host<Cow<'static, str>> = Host::Domain(Cow::Borrowed("example.com"));
+  let borrowed: Host<Cow<'static, str>> =
+    Host::from(Domain::try_from(Cow::Borrowed("example.com")).unwrap());
   assert_roundtrips(&borrowed);
-  let owned: Host<Cow<'static, str>> = Host::Domain(Cow::Owned(String::from("example.org")));
+  let owned: Host<Cow<'static, str>> =
+    Host::from(Domain::try_from(Cow::Owned(String::from("example.org"))).unwrap());
   assert_roundtrips(&owned);
 
-  let borrowed: Host<Cow<'static, [u8]>> = Host::Domain(Cow::Borrowed(&b"example.com"[..]));
+  let borrowed: Host<Cow<'static, [u8]>> =
+    Host::from(Domain::try_from(Cow::Borrowed(&b"example.com"[..])).unwrap());
   assert_roundtrips(&borrowed);
-  let owned: Host<Cow<'static, [u8]>> = Host::Domain(Cow::Owned(Vec::from(&b"example.org"[..])));
+  let owned: Host<Cow<'static, [u8]>> =
+    Host::from(Domain::try_from(Cow::Owned(Vec::from(&b"example.org"[..]))).unwrap());
   assert_roundtrips(&owned);
 
   for (input, expected) in [
     ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
     ("example%2Ecom", "example.com"),
   ] {
-    assert_str_normalizes(&Host::Domain(Cow::Borrowed(input)), expected);
+    assert_str_normalizes(&RawHost::Domain(Cow::Borrowed(input)), expected);
     assert_bytes_normalizes(
-      &Host::Domain(Cow::Borrowed(input.as_bytes())),
+      &RawHost::Domain(Cow::Borrowed(input.as_bytes())),
       expected.as_bytes(),
     );
   }
 
-  let invalid = Host::Domain(Cow::Borrowed(""));
+  let invalid = RawHost::Domain(Cow::Borrowed(""));
   assert_rejected::<Host<Cow<'static, str>>, _>(&invalid);
-  let invalid: Host<Cow<'static, str>> = Host::Domain(Cow::Owned(String::from("example.123")));
+  let invalid: RawHost<Cow<'static, str>> =
+    RawHost::Domain(Cow::Owned(String::from("example.123")));
   assert_rejected::<Host<Cow<'static, str>>, _>(&invalid);
-  let invalid = Host::Domain(Cow::Borrowed(&[0xff][..]));
+  let invalid = RawHost::Domain(Cow::Borrowed(&[0xff][..]));
   assert_rejected::<Host<Cow<'static, [u8]>>, _>(&invalid);
-  let invalid: Host<Cow<'static, [u8]>> = Host::Domain(Cow::Owned(Vec::from(&b"-example.com"[..])));
+  let invalid: RawHost<Cow<'static, [u8]>> =
+    RawHost::Domain(Cow::Owned(Vec::from(&b"-example.com"[..])));
   assert_rejected::<Host<Cow<'static, [u8]>>, _>(&invalid);
 }
 

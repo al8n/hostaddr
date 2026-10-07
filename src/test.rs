@@ -366,19 +366,10 @@ fn test_hostaddr_ipv6_display() {
 }
 
 #[test]
-fn test_domain_new_unchecked_and_from_ref_unchecked() {
-  // Exercise the From<HostAddr<S>> -> HostAddr<Domain<S>> path
+fn test_host_domain_wrapper_accessors() {
   let addr: HostAddr<String> = "example.com:443".parse().unwrap();
-  let domain_addr: HostAddr<Domain<String>> = addr.into();
-  assert_eq!(
-    domain_addr.host().domain().unwrap().as_inner(),
-    "example.com"
-  );
-
-  // Also test the ref path
-  let addr: HostAddr<String> = "example.com:443".parse().unwrap();
-  let ref_addr: HostAddr<&Domain<String>> = (&addr).into();
-  assert_eq!(ref_addr.host().domain().unwrap().as_inner(), "example.com");
+  assert_eq!(addr.host().as_domain().unwrap().as_inner(), "example.com");
+  assert_eq!(addr.host().domain().unwrap(), "example.com");
 }
 
 #[test]
@@ -439,7 +430,7 @@ fn test_hostaddr_from_ascii_bytes_ip() {
 fn test_host_from_domain_ref() {
   let host = Host::<String>::try_from("example.com").unwrap();
   match &host {
-    Host::Domain(d) => assert_eq!(d.as_str(), "example.com"),
+    Host::Domain(d) => assert_eq!(d.as_inner().as_str(), "example.com"),
     _ => panic!("expected domain"),
   }
 }

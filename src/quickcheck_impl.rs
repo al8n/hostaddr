@@ -70,7 +70,7 @@ macro_rules! impl_arbitrary {
       impl Arbitrary for Host<$ty> {
         fn arbitrary(g: &mut Gen) -> Self {
           if bool::arbitrary(g) {
-            Host::Domain(<Domain<$ty> as Arbitrary>::arbitrary(g).0)
+            Host::Domain(<Domain<$ty> as Arbitrary>::arbitrary(g))
           } else {
             Host::Ip(Arbitrary::arbitrary(g))
           }

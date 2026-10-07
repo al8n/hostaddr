@@ -11,6 +11,151 @@ use iprfc::{
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum HumanSocketAddr {
+  V4 {
+    ip: Ipv4Addr,
+    port: u16,
+  },
+  V6 {
+    ip: Ipv6Addr,
+    port: u16,
+    flowinfo: u32,
+    scope_id: u32,
+  },
+}
+
+#[cfg(feature = "serde")]
+impl HumanSocketAddr {
+  #[inline]
+  const fn from_socket_addr(addr: SocketAddr) -> Self {
+    match addr {
+      SocketAddr::V4(addr) => Self::V4 {
+        ip: *addr.ip(),
+        port: addr.port(),
+      },
+      SocketAddr::V6(addr) => Self::V6 {
+        ip: *addr.ip(),
+        port: addr.port(),
+        flowinfo: addr.flowinfo(),
+        scope_id: addr.scope_id(),
+      },
+    }
+  }
+
+  #[inline]
+  const fn into_socket_addr(self) -> SocketAddr {
+    match self {
+      Self::V4 { ip, port } => SocketAddr::V4(SocketAddrV4::new(ip, port)),
+      Self::V6 {
+        ip,
+        port,
+        flowinfo,
+        scope_id,
+      } => SocketAddr::V6(SocketAddrV6::new(ip, port, flowinfo, scope_id)),
+    }
+  }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+enum BinarySocketAddr {
+  V4(Ipv4Addr, u16),
+  V6(Ipv6Addr, u16),
+  V6Extended(Ipv6Addr, u16, u32, u32),
+}
+
+#[cfg(feature = "serde")]
+impl BinarySocketAddr {
+  #[inline]
+  const fn from_socket_addr(addr: SocketAddr) -> Self {
+    match addr {
+      SocketAddr::V4(addr) => Self::V4(*addr.ip(), addr.port()),
+      SocketAddr::V6(addr) if addr.flowinfo() == 0 && addr.scope_id() == 0 => {
+        Self::V6(*addr.ip(), addr.port())
+      }
+      SocketAddr::V6(addr) => {
+        Self::V6Extended(*addr.ip(), addr.port(), addr.flowinfo(), addr.scope_id())
+      }
+    }
+  }
+
+  #[inline]
+  const fn into_socket_addr(self) -> SocketAddr {
+    match self {
+      Self::V4(ip, port) => SocketAddr::V4(SocketAddrV4::new(ip, port)),
+      Self::V6(ip, port) => SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0)),
+      Self::V6Extended(ip, port, flowinfo, scope_id) => {
+        SocketAddr::V6(SocketAddrV6::new(ip, port, flowinfo, scope_id))
+      }
+    }
+  }
+}
+
+#[cfg(feature = "serde")]
+struct HumanSocketAddrVisitor;
+
+#[cfg(feature = "serde")]
+impl<'de> serde::de::Visitor<'de> for HumanSocketAddrVisitor {
+  type Value = SocketAddr;
+
+  #[inline]
+  fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("a v4/v6 socket-address object or a legacy socket-address string")
+  }
+
+  #[inline]
+  fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+  where
+    E: serde::de::Error,
+  {
+    value.parse().map_err(E::custom)
+  }
+
+  #[inline]
+  fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+  where
+    M: serde::de::MapAccess<'de>,
+  {
+    use serde::Deserialize as _;
+
+    HumanSocketAddr::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+      .map(HumanSocketAddr::into_socket_addr)
+  }
+}
+
+#[cfg(feature = "serde")]
+#[inline]
+fn serialize_socket_addr<S>(addr: SocketAddr, serializer: S) -> Result<S::Ok, S::Error>
+where
+  S: serde::Serializer,
+{
+  use serde::Serialize as _;
+
+  if serializer.is_human_readable() {
+    HumanSocketAddr::from_socket_addr(addr).serialize(serializer)
+  } else {
+    BinarySocketAddr::from_socket_addr(addr).serialize(serializer)
+  }
+}
+
+#[cfg(feature = "serde")]
+#[inline]
+fn deserialize_socket_addr<'de, D>(deserializer: D) -> Result<SocketAddr, D::Error>
+where
+  D: serde::Deserializer<'de>,
+{
+  use serde::Deserialize as _;
+
+  if deserializer.is_human_readable() {
+    deserializer.deserialize_any(HumanSocketAddrVisitor)
+  } else {
+    BinarySocketAddr::deserialize(deserializer).map(BinarySocketAddr::into_socket_addr)
+  }
+}
+
 macro_rules! semantic_addr_class {
   (
     ip: $ip_name:ident, $ip_error:ident, $ip_doc:literal, $ip_error_doc:literal, $ip_error_msg:literal;
@@ -126,11 +271,7 @@ macro_rules! semantic_addr_class {
       where
         S: serde::Serializer,
       {
-        if serializer.is_human_readable() {
-          serializer.collect_str(&self.0)
-        } else {
-          serde::Serialize::serialize(&self.0, serializer)
-        }
+        serialize_socket_addr(self.0, serializer)
       }
     }
 
@@ -141,14 +282,7 @@ macro_rules! semantic_addr_class {
       where
         D: serde::Deserializer<'de>,
       {
-        let addr = if deserializer.is_human_readable() {
-          let addr = <&str as serde::Deserialize>::deserialize(deserializer)?;
-          addr
-            .parse::<SocketAddr>()
-            .map_err(serde::de::Error::custom)?
-        } else {
-          <SocketAddr as serde::Deserialize>::deserialize(deserializer)?
-        };
+        let addr = deserialize_socket_addr(deserializer)?;
         Self::new(addr).map_err(serde::de::Error::custom)
       }
     }
