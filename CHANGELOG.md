@@ -3,7 +3,7 @@
 ## 1.0.0-rc.2 (2026-10-08)
 
 > Published release candidate. The final `1.0.0` release remains subject to
-> downstream validation and the compatibility checks described above.
+> downstream validation and the compatibility checks described below.
 
 ### Domain and Serde correctness
 
