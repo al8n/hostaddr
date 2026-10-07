@@ -1,0 +1,60 @@
+name: Docs and package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "SECURITY.md"
+      - "docs/**"
+      - "examples/**"
+      - "src/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "SECURITY.md"
+      - "docs/**"
+      - "examples/**"
+      - "src/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTDOCFLAGS: --cfg docsrs -Dwarnings
+
+jobs:
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: rustup update nightly --no-self-update && rustup default nightly
+      - name: Run doctests
+        run: cargo test --all-features --doc
+      - name: Check examples
+        run: cargo check --all-features --examples
+      - name: Build documentation
+        run: cargo doc --all-features --no-deps
+
+  package:
+    name: package
+    needs: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: rustup update nightly --no-self-update && rustup default nightly
+      - name: Package crate
+        run: cargo package --all-features

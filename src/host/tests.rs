@@ -96,3 +96,166 @@ fn host_bytes_as_str_panics_for_invalid_utf8_domain_storage() {
   let invalid: Host<&[u8]> = Host::Domain(&[0xff]);
   let _ = invalid.as_str();
 }
+
+#[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
+#[test]
+fn host_deserialize_validates_and_normalizes_domain_variants() {
+  use std::{string::String, vec::Vec};
+
+  for invalid in ["", "-example.com", "example-.com", "example.123"] {
+    let invalid = Host::Domain(String::from(invalid));
+
+    let json = serde_json::to_string(&invalid).unwrap();
+    assert!(serde_json::from_str::<Host<String>>(&json).is_err());
+    let bincode = bincode::serialize(&invalid).unwrap();
+    assert!(bincode::deserialize::<Host<String>>(&bincode).is_err());
+    let msgpack = rmp_serde::to_vec(&invalid).unwrap();
+    assert!(rmp_serde::from_slice::<Host<String>>(&msgpack).is_err());
+  }
+
+  let invalid_utf8 = Host::Domain(Vec::from([0xff]));
+  let json = serde_json::to_string(&invalid_utf8).unwrap();
+  assert!(serde_json::from_str::<Host<Vec<u8>>>(&json).is_err());
+  let bincode = bincode::serialize(&invalid_utf8).unwrap();
+  assert!(bincode::deserialize::<Host<Vec<u8>>>(&bincode).is_err());
+  let msgpack = rmp_serde::to_vec(&invalid_utf8).unwrap();
+  assert!(rmp_serde::from_slice::<Host<Vec<u8>>>(&msgpack).is_err());
+
+  for (encoded, expected) in [
+    ("example.com", "example.com"),
+    ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
+  ] {
+    let raw = Host::Domain(String::from(encoded));
+
+    let json = serde_json::to_string(&raw).unwrap();
+    let host: Host<String> = serde_json::from_str(&json).unwrap();
+    assert_eq!(host.unwrap_domain(), expected);
+
+    let bincode = bincode::serialize(&raw).unwrap();
+    let host: Host<String> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(host.unwrap_domain(), expected);
+
+    let msgpack = rmp_serde::to_vec(&raw).unwrap();
+    let host: Host<String> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(host.unwrap_domain(), expected);
+  }
+}
+
+#[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
+#[test]
+fn cow_host_serde_validates_owned_and_borrowed_storage() {
+  use std::{borrow::Cow, fmt::Debug, string::String, vec::Vec};
+
+  fn assert_roundtrips<T>(value: &T)
+  where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + Debug,
+  {
+    let json = serde_json::to_string(value).unwrap();
+    assert_eq!(serde_json::from_str::<T>(&json).unwrap(), *value);
+
+    let bincode = bincode::serialize(value).unwrap();
+    assert_eq!(bincode::deserialize::<T>(&bincode).unwrap(), *value);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    assert_eq!(rmp_serde::from_slice::<T>(&msgpack).unwrap(), *value);
+  }
+
+  fn assert_rejected<T, W>(wire: &W)
+  where
+    T: serde::de::DeserializeOwned,
+    W: serde::Serialize,
+  {
+    let json = serde_json::to_string(wire).unwrap();
+    assert!(serde_json::from_str::<T>(&json).is_err());
+
+    let bincode = bincode::serialize(wire).unwrap();
+    assert!(bincode::deserialize::<T>(&bincode).is_err());
+
+    let msgpack = rmp_serde::to_vec(wire).unwrap();
+    assert!(rmp_serde::from_slice::<T>(&msgpack).is_err());
+  }
+
+  fn assert_str_normalizes(value: &Host<Cow<'static, str>>, expected: &str) {
+    let json = serde_json::to_string(value).unwrap();
+    let decoded: Host<Cow<'static, str>> = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.unwrap_domain().as_ref(), expected);
+
+    let bincode = bincode::serialize(value).unwrap();
+    let decoded: Host<Cow<'static, str>> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(decoded.unwrap_domain().as_ref(), expected);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    let decoded: Host<Cow<'static, str>> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(decoded.unwrap_domain().as_ref(), expected);
+  }
+
+  fn assert_bytes_normalizes(value: &Host<Cow<'static, [u8]>>, expected: &[u8]) {
+    let json = serde_json::to_string(value).unwrap();
+    let decoded: Host<Cow<'static, [u8]>> = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.unwrap_domain().as_ref(), expected);
+
+    let bincode = bincode::serialize(value).unwrap();
+    let decoded: Host<Cow<'static, [u8]>> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(decoded.unwrap_domain().as_ref(), expected);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    let decoded: Host<Cow<'static, [u8]>> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(decoded.unwrap_domain().as_ref(), expected);
+  }
+
+  let borrowed: Host<Cow<'static, str>> = Host::Domain(Cow::Borrowed("example.com"));
+  assert_roundtrips(&borrowed);
+  let owned: Host<Cow<'static, str>> = Host::Domain(Cow::Owned(String::from("example.org")));
+  assert_roundtrips(&owned);
+
+  let borrowed: Host<Cow<'static, [u8]>> = Host::Domain(Cow::Borrowed(&b"example.com"[..]));
+  assert_roundtrips(&borrowed);
+  let owned: Host<Cow<'static, [u8]>> = Host::Domain(Cow::Owned(Vec::from(&b"example.org"[..])));
+  assert_roundtrips(&owned);
+
+  for (input, expected) in [
+    ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
+    ("example%2Ecom", "example.com"),
+  ] {
+    assert_str_normalizes(&Host::Domain(Cow::Borrowed(input)), expected);
+    assert_bytes_normalizes(
+      &Host::Domain(Cow::Borrowed(input.as_bytes())),
+      expected.as_bytes(),
+    );
+  }
+
+  let invalid = Host::Domain(Cow::Borrowed(""));
+  assert_rejected::<Host<Cow<'static, str>>, _>(&invalid);
+  let invalid: Host<Cow<'static, str>> = Host::Domain(Cow::Owned(String::from("example.123")));
+  assert_rejected::<Host<Cow<'static, str>>, _>(&invalid);
+  let invalid = Host::Domain(Cow::Borrowed(&[0xff][..]));
+  assert_rejected::<Host<Cow<'static, [u8]>>, _>(&invalid);
+  let invalid: Host<Cow<'static, [u8]>> = Host::Domain(Cow::Owned(Vec::from(&b"-example.com"[..])));
+  assert_rejected::<Host<Cow<'static, [u8]>>, _>(&invalid);
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
+fn host_domain_equality_ordering_and_hash_follow_storage_representation() {
+  let lower: Host<String> = Host::try_from("example.com").unwrap();
+  let upper: Host<String> = Host::try_from("EXAMPLE.COM").unwrap();
+  assert_ne!(lower, upper);
+  assert_ne!(lower.cmp(&upper), core::cmp::Ordering::Equal);
+
+  #[cfg(feature = "std")]
+  {
+    use std::collections::HashSet;
+
+    let mut set = HashSet::new();
+    set.insert(lower);
+    set.insert(upper.clone());
+    assert_eq!(set.len(), 2);
+  }
+
+  let fqdn: Host<String> = Host::try_from("EXAMPLE.COM.").unwrap();
+  assert_ne!(upper, fqdn);
+
+  let ip_lower = Host::<String>::from_ip("127.0.0.1".parse().unwrap());
+  let ip_upper = Host::<String>::from_ip("127.0.0.1".parse().unwrap());
+  assert_eq!(ip_lower, ip_upper);
+}

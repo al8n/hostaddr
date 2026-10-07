@@ -55,6 +55,42 @@ fn test_hostaddr_parsing() {
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 #[test]
+fn ipv6_parser_accepts_bare_and_bracketed_forms() {
+  use std::{string::String, string::ToString};
+
+  let forms = [
+    ("2001:db8::1", None),
+    ("2001:0db8:0000:0000:0000:0000:0000:0001", None),
+    ("[2001:db8::1]", None),
+    ("[2001:db8::1]:443", Some(443)),
+  ];
+
+  for (input, port) in forms {
+    let parsed: HostAddr<String> = input.parse().unwrap();
+    assert_eq!(
+      parsed.as_ref().host().unwrap_ip(),
+      "2001:db8::1".parse::<IpAddr>().unwrap()
+    );
+    assert_eq!(parsed.port(), port);
+
+    let displayed = parsed.to_string();
+    let reparsed: HostAddr<String> = displayed.parse().unwrap();
+    assert_eq!(reparsed, parsed);
+  }
+
+  for input in ["2001:db8::1", "[2001:db8::1]", "[2001:db8::1]:443"] {
+    let parsed = HostAddr::try_from_ascii_str(input).unwrap();
+    assert!(parsed.is_ipv6());
+  }
+
+  for input in [b"2001:db8::1".as_slice(), b"[2001:db8::1]:443"] {
+    let parsed = HostAddr::try_from_ascii_bytes(input).unwrap();
+    assert!(parsed.is_ipv6());
+  }
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
 fn test_hostaddr_try_into() {
   use std::string::String;
 
@@ -129,6 +165,38 @@ fn ipv6_display_roundtrip() {
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 #[test]
+fn hostaddr_domain_equality_ordering_and_hash_follow_storage_representation() {
+  use std::string::String;
+
+  let lower: HostAddr<String> = "example.com:80".parse().unwrap();
+  let upper: HostAddr<String> = "EXAMPLE.COM:80".parse().unwrap();
+  assert_ne!(lower, upper);
+  assert_ne!(lower.cmp(&upper), core::cmp::Ordering::Equal);
+
+  #[cfg(feature = "std")]
+  {
+    use std::collections::HashSet;
+
+    let mut set = HashSet::new();
+    set.insert(lower);
+    set.insert(upper.clone());
+    assert_eq!(set.len(), 2);
+  }
+
+  let different_port: HostAddr<String> = "EXAMPLE.COM:81".parse().unwrap();
+  assert_ne!(upper, different_port);
+  assert!(upper < different_port);
+
+  let fqdn: HostAddr<String> = "example.com.:80".parse().unwrap();
+  assert_ne!(upper, fqdn);
+
+  let ip_lower: HostAddr<String> = "127.0.0.1:80".parse().unwrap();
+  let ip_upper: HostAddr<String> = "127.0.0.1:80".parse().unwrap();
+  assert_eq!(ip_lower, ip_upper);
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
 fn hostaddr_conversions_and_accessors_cover_public_contract() {
   use std::{boxed::Box, string::String};
 
@@ -178,6 +246,14 @@ fn hostaddr_conversions_and_accessors_cover_public_contract() {
   assert_eq!(
     HostAddr::<String>::from(sock_v6).to_socket_addr(),
     Some(SocketAddr::V6(sock_v6))
+  );
+
+  let scoped = SocketAddrV6::new(v6, 8083, 0x1234, 7);
+  let host = HostAddr::<String>::from(scoped);
+  assert_eq!(host.port(), Some(8083));
+  assert_eq!(
+    host.to_socket_addr(),
+    Some(SocketAddr::V6(SocketAddrV6::new(v6, 8083, 0, 0)))
   );
 
   let mut mutable = HostAddr::new(Host::from(
@@ -307,4 +383,183 @@ fn hostaddr_conversions_and_accessors_cover_public_contract() {
   assert!(!HostAddr::try_from_ascii_str("example.com")
     .unwrap()
     .is_localhost());
+}
+
+#[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
+#[test]
+fn hostaddr_deserialize_validates_and_normalizes_domain_hosts() {
+  use std::{string::String, vec::Vec};
+
+  for invalid in ["", "-example.com", "example-.com", "example.123"] {
+    let invalid = HostAddr {
+      host: Host::Domain(String::from(invalid)),
+      port: Some(443),
+    };
+
+    let json = serde_json::to_string(&invalid).unwrap();
+    assert!(serde_json::from_str::<HostAddr<String>>(&json).is_err());
+    let bincode = bincode::serialize(&invalid).unwrap();
+    assert!(bincode::deserialize::<HostAddr<String>>(&bincode).is_err());
+    let msgpack = rmp_serde::to_vec(&invalid).unwrap();
+    assert!(rmp_serde::from_slice::<HostAddr<String>>(&msgpack).is_err());
+  }
+
+  let invalid_utf8 = HostAddr {
+    host: Host::Domain(Vec::from([0xff])),
+    port: None,
+  };
+  let json = serde_json::to_string(&invalid_utf8).unwrap();
+  assert!(serde_json::from_str::<HostAddr<Vec<u8>>>(&json).is_err());
+  let bincode = bincode::serialize(&invalid_utf8).unwrap();
+  assert!(bincode::deserialize::<HostAddr<Vec<u8>>>(&bincode).is_err());
+  let msgpack = rmp_serde::to_vec(&invalid_utf8).unwrap();
+  assert!(rmp_serde::from_slice::<HostAddr<Vec<u8>>>(&msgpack).is_err());
+
+  for (encoded, expected) in [
+    ("example.com", "example.com"),
+    ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
+  ] {
+    let raw = HostAddr {
+      host: Host::Domain(String::from(encoded)),
+      port: Some(8443),
+    };
+
+    let json = serde_json::to_string(&raw).unwrap();
+    let addr: HostAddr<String> = serde_json::from_str(&json).unwrap();
+    assert_eq!(addr.unwrap_domain(), (String::from(expected), Some(8443)));
+
+    let bincode = bincode::serialize(&raw).unwrap();
+    let addr: HostAddr<String> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(addr.unwrap_domain(), (String::from(expected), Some(8443)));
+
+    let msgpack = rmp_serde::to_vec(&raw).unwrap();
+    let addr: HostAddr<String> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(addr.unwrap_domain(), (String::from(expected), Some(8443)));
+  }
+}
+
+#[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
+#[test]
+fn cow_hostaddr_serde_validates_owned_and_borrowed_storage() {
+  use std::{borrow::Cow, fmt::Debug, string::String, vec::Vec};
+
+  fn assert_roundtrips<T>(value: &T)
+  where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + Debug,
+  {
+    let json = serde_json::to_string(value).unwrap();
+    assert_eq!(serde_json::from_str::<T>(&json).unwrap(), *value);
+
+    let bincode = bincode::serialize(value).unwrap();
+    assert_eq!(bincode::deserialize::<T>(&bincode).unwrap(), *value);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    assert_eq!(rmp_serde::from_slice::<T>(&msgpack).unwrap(), *value);
+  }
+
+  fn assert_rejected<T, W>(wire: &W)
+  where
+    T: serde::de::DeserializeOwned,
+    W: serde::Serialize,
+  {
+    let json = serde_json::to_string(wire).unwrap();
+    assert!(serde_json::from_str::<T>(&json).is_err());
+
+    let bincode = bincode::serialize(wire).unwrap();
+    assert!(bincode::deserialize::<T>(&bincode).is_err());
+
+    let msgpack = rmp_serde::to_vec(wire).unwrap();
+    assert!(rmp_serde::from_slice::<T>(&msgpack).is_err());
+  }
+
+  fn assert_str_normalizes(value: &HostAddr<Cow<'static, str>>, expected: &str) {
+    let json = serde_json::to_string(value).unwrap();
+    let decoded: HostAddr<Cow<'static, str>> = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
+
+    let bincode = bincode::serialize(value).unwrap();
+    let decoded: HostAddr<Cow<'static, str>> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    let decoded: HostAddr<Cow<'static, str>> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
+  }
+
+  fn assert_bytes_normalizes(value: &HostAddr<Cow<'static, [u8]>>, expected: &[u8]) {
+    let json = serde_json::to_string(value).unwrap();
+    let decoded: HostAddr<Cow<'static, [u8]>> = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
+
+    let bincode = bincode::serialize(value).unwrap();
+    let decoded: HostAddr<Cow<'static, [u8]>> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    let decoded: HostAddr<Cow<'static, [u8]>> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
+  }
+
+  let borrowed = HostAddr {
+    host: Host::Domain(Cow::Borrowed("example.com")),
+    port: Some(443),
+  };
+  assert_roundtrips(&borrowed);
+  let owned: HostAddr<Cow<'static, str>> = HostAddr {
+    host: Host::Domain(Cow::Owned(String::from("example.org"))),
+    port: None,
+  };
+  assert_roundtrips(&owned);
+
+  let borrowed = HostAddr {
+    host: Host::Domain(Cow::Borrowed(&b"example.com"[..])),
+    port: Some(443),
+  };
+  assert_roundtrips(&borrowed);
+  let owned: HostAddr<Cow<'static, [u8]>> = HostAddr {
+    host: Host::Domain(Cow::Owned(Vec::from(&b"example.org"[..]))),
+    port: None,
+  };
+  assert_roundtrips(&owned);
+
+  for (input, expected) in [
+    ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
+    ("example%2Ecom", "example.com"),
+  ] {
+    assert_str_normalizes(
+      &HostAddr {
+        host: Host::Domain(Cow::Borrowed(input)),
+        port: Some(443),
+      },
+      expected,
+    );
+    assert_bytes_normalizes(
+      &HostAddr {
+        host: Host::Domain(Cow::Borrowed(input.as_bytes())),
+        port: Some(443),
+      },
+      expected.as_bytes(),
+    );
+  }
+
+  let invalid = HostAddr {
+    host: Host::Domain(Cow::Borrowed("")),
+    port: None,
+  };
+  assert_rejected::<HostAddr<Cow<'static, str>>, _>(&invalid);
+  let invalid: HostAddr<Cow<'static, str>> = HostAddr {
+    host: Host::Domain(Cow::Owned(String::from("example.123"))),
+    port: Some(443),
+  };
+  assert_rejected::<HostAddr<Cow<'static, str>>, _>(&invalid);
+  let invalid = HostAddr {
+    host: Host::Domain(Cow::Borrowed(&[0xff][..])),
+    port: None,
+  };
+  assert_rejected::<HostAddr<Cow<'static, [u8]>>, _>(&invalid);
+  let invalid: HostAddr<Cow<'static, [u8]>> = HostAddr {
+    host: Host::Domain(Cow::Owned(Vec::from(&b"-example.com"[..]))),
+    port: Some(443),
+  };
+  assert_rejected::<HostAddr<Cow<'static, [u8]>>, _>(&invalid);
 }

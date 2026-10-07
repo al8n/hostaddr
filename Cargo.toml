@@ -1,13 +1,12 @@
 [package]
 name = "hostaddr"
-version = "0.3.0"
+version = "1.0.0-rc.1"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
-homepage = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
 description = "Type-safe, validated DNS domain names, hosts, and host addresses with IDNA/punycode support. Generic over storage (`String`, `Arc<str>`, `Vec<u8>`, stack-allocated `Buffer`, etc.) and `no_std`/`no-alloc` compatible."
 license = "MIT OR Apache-2.0"
-rust-version = "1.83"
+rust-version = "1.89"
 categories = ["network-programming", "parser-implementations", "no-std", "no-std::no-alloc"]
 keywords = ["dns", "domain", "hostname", "host", "address"]
 
@@ -19,12 +18,16 @@ alloc = [
   "idna/compiled_data",
   "percent-encoding/alloc",
   "memchr/alloc",
+  "serde?/alloc",
   "tinyvec_1?/alloc",
   "cheap-clone?/alloc",
 ]
 std = [
+  "alloc",
+  "iprfc/std",
   "idna/default",
   "percent-encoding/default",
+  "serde?/std",
   "thiserror/default",
   "simdutf8/default",
   "memchr/default",
@@ -58,9 +61,9 @@ serde = [
 arbitrary = ["dep:arbitrary", "smol_str_0_3?/arbitrary", "tinyvec_1?/arbitrary", "smallvec_1?/arbitrary"]
 
 [dependencies]
-derive_more = { version = "2", features = ["display", "from", "is_variant", "unwrap", "try_unwrap", "as_ref"] }
+derive_more = { version = "2", default-features = false, features = ["display", "from", "is_variant", "unwrap", "try_unwrap", "as_ref"] }
 either = { version = "1", default-features = false }
-iprfc = { version = "0.2", default-features = false }
+iprfc = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 simdutf8 = { version = "0.1", default-features = false }
@@ -93,6 +96,9 @@ rmp-serde = "1"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
 
 [workspace.lints.rust]
 rust_2018_idioms = "warn"

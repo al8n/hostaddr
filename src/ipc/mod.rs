@@ -16,6 +16,7 @@ mod tests;
 /// Enum variants store their payloads by value, so DST storage is represented
 /// through sized references such as `Addr<&str, &Path, &[u8]>`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[non_exhaustive]
 pub enum Addr<H, P, A> {
   /// A DNS/IP host address.
   Host(HostAddr<H>),
@@ -51,7 +52,10 @@ pub enum IpcAddr<P, A> {
   #[cfg(unix)]
   #[cfg_attr(docsrs, doc(cfg(unix)))]
   Unix(UnixAddr<P>),
-  /// A Linux abstract socket name, without the leading NUL byte.
+  /// A Linux abstract socket name payload.
+  ///
+  /// The payload is interpreted as the name after the kernel's leading-NUL
+  /// marker. The wrapper preserves the supplied bytes exactly.
   #[cfg(target_os = "linux")]
   #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
   Abstract(AbstractAddr<A>),
@@ -90,6 +94,9 @@ pub struct UnixAddr<P: ?Sized>(P);
 #[cfg_attr(docsrs, doc(cfg(unix)))]
 impl<P> UnixAddr<P> {
   /// Creates a Unix-domain socket address from path storage.
+  ///
+  /// This is a representation wrapper only. It does not validate pathname
+  /// length or NUL bytes, check filesystem state, or attempt a connection.
   #[inline]
   pub const fn new(path: P) -> Self {
     Self(path)
@@ -185,9 +192,11 @@ impl<P> From<P> for UnixAddr<P> {
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct NamedPipeAddr<P: ?Sized>(P);
 
-/// A Linux abstract socket name.
+/// A Linux abstract socket name payload.
 ///
-/// The stored bytes do not include the leading NUL byte used by the kernel.
+/// The payload is interpreted as the name after the kernel's leading-NUL
+/// marker. Construction preserves the supplied bytes exactly: it does not add,
+/// remove, or reject leading or interior NUL bytes.
 #[cfg(target_os = "linux")]
 #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -213,6 +222,7 @@ pub struct VsockAddr {
 /// does not prove that every IPC endpoint target is same-machine or otherwise
 /// safe to use as a trust boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[non_exhaustive]
 pub enum LocalAddr<P, A> {
   /// A loopback IP socket address.
   Loopback(LoopbackAddr),
@@ -246,6 +256,9 @@ const _: () = {
 
   impl<P> NamedPipeAddr<P> {
     /// Creates a Windows named-pipe address from path storage.
+    ///
+    /// This is a representation wrapper only. It does not validate the pipe
+    /// name, check endpoint state, or attempt a connection.
     #[inline]
     pub const fn new(path: P) -> Self {
       Self(path)
@@ -332,6 +345,10 @@ const _: () = {
 const _: () = {
   impl<A> AbstractAddr<A> {
     /// Creates an abstract socket address from byte storage.
+    ///
+    /// The bytes are interpreted as the name after the kernel's leading-NUL
+    /// marker and are stored unchanged. No NUL, length, endpoint, or
+    /// trust-boundary validation is performed.
     #[inline]
     pub const fn new(name: A) -> Self {
       Self(name)
@@ -379,7 +396,7 @@ const _: () = {
   where
     A: AsRef<[u8]>,
   {
-    /// Returns the abstract socket name bytes without a leading NUL byte.
+    /// Returns the exact bytes supplied to the wrapper.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
       self.0.as_ref()
@@ -389,7 +406,8 @@ const _: () = {
   impl AbstractAddr<[u8]> {
     /// Converts bytes into a borrowed abstract socket address.
     ///
-    /// The input must not include the leading NUL byte used by the kernel.
+    /// The input is preserved exactly; callers choose whether it includes a
+    /// leading or interior NUL byte.
     #[inline]
     pub const fn from_bytes(name: &[u8]) -> &Self {
       Self::from_ref(name)
@@ -414,6 +432,9 @@ const _: () = {
   #[cfg_attr(docsrs, doc(cfg(feature = "vsock")))]
   impl VsockAddr {
     /// Creates a VM socket address from a context identifier and port.
+    ///
+    /// This stores the supplied identifiers without checking reachability,
+    /// permissions, or whether the endpoint is trusted.
     #[inline]
     pub const fn new(cid: u32, port: u32) -> Self {
       Self { cid, port }

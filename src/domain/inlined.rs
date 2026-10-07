@@ -285,8 +285,8 @@ impl Buffer {
   /// Returns the domain as a `str`.
   #[inline]
   pub fn as_str(&self) -> &str {
-    // SAFETY: The domain is guaranteed to be valid UTF-8.
-    unsafe { core::str::from_utf8_unchecked(&self.buf[..self.len()]) }
+    core::str::from_utf8(&self.buf[..self.len()])
+      .expect("Buffer invariant requires valid UTF-8 domain data")
   }
 
   /// Returns the domain as a `str`.
@@ -304,8 +304,10 @@ impl Buffer {
   /// ```
   #[inline]
   pub const fn const_as_str(&self) -> &str {
-    // SAFETY: The domain is guaranteed to be valid UTF-8.
-    unsafe { core::str::from_utf8_unchecked(self.as_bytes()) }
+    match core::str::from_utf8(self.as_bytes()) {
+      Ok(domain) => domain,
+      Err(_) => panic!("Buffer invariant requires valid UTF-8 domain data"),
+    }
   }
 
   /// Returns the domain as a `[u8]`
@@ -317,7 +319,7 @@ impl Buffer {
 
   /// Push a `u8` to the buffer.
   #[inline]
-  pub const fn push(&mut self, byte: u8) -> Result<(), u8> {
+  pub(super) const fn push(&mut self, byte: u8) -> Result<(), u8> {
     let len = self.len();
     if len == 254 {
       return Err(byte);
@@ -346,19 +348,6 @@ impl Buffer {
   #[inline]
   pub(super) fn copy_from_str(s: &str) -> Self {
     Self::copy_from_slice(s.as_bytes())
-  }
-}
-
-impl core::fmt::Write for Buffer {
-  fn write_str(&mut self, s: &str) -> core::fmt::Result {
-    let len = s.len();
-    let pos = self.len();
-    if pos + len > 254 {
-      return Err(core::fmt::Error);
-    }
-    self.buf[pos..pos + len].copy_from_slice(s.as_bytes());
-    *self.buf.last_mut().unwrap() += len as u8;
-    Ok(())
   }
 }
 

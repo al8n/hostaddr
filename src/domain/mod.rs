@@ -10,6 +10,19 @@ use core::borrow::Borrow;
 
 pub use inlined::Buffer;
 
+#[cfg(any(feature = "alloc", feature = "std"))]
+struct BufferWriter<'a>(&'a mut Buffer);
+
+#[cfg(any(feature = "alloc", feature = "std"))]
+impl core::fmt::Write for BufferWriter<'_> {
+  fn write_str(&mut self, s: &str) -> core::fmt::Result {
+    for byte in s.bytes() {
+      self.0.push(byte).map_err(|_| core::fmt::Error)?;
+    }
+    Ok(())
+  }
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -47,6 +60,10 @@ impl ParseAsciiDomainError {
 /// Non-ASCII labels are encoded in punycode per IDNA if this is the host of a special URL,
 /// or percent encoded for non-special URLs.
 ///
+/// Equality, ordering, and hashing compare the stored representation. They are
+/// therefore case-sensitive; normalize names explicitly for DNS-insensitive
+/// identity keys.
+///
 /// ## Note
 /// In this implementation, a fully-qualified domain name (FQDN) is valid. This means that
 /// the domain name can end with a `.` dot.
@@ -82,9 +99,25 @@ impl ParseAsciiDomainError {
   Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display, derive_more::AsRef,
 )]
 #[repr(transparent)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 pub struct Domain<S: ?Sized>(pub(super) S);
+
+#[cfg(feature = "serde")]
+impl<'de, S> serde::Deserialize<'de> for Domain<S>
+where
+  S: serde::Deserialize<'de>,
+  Self: TryFrom<S>,
+  <Self as TryFrom<S>>::Error: core::fmt::Display,
+{
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let inner = S::deserialize(deserializer)?;
+    Self::try_from(inner).map_err(serde::de::Error::custom)
+  }
+}
 
 impl<S: ?Sized> Domain<Domain<S>> {
   /// Flattens a `Domain<Domain<S>>` into a `Domain<S>`.
@@ -464,8 +497,52 @@ impl Domain<[u8]> {
   /// ```
   #[inline]
   pub const fn as_str(&self) -> &Domain<str> {
-    // SAFETY: We have already verified that the bytes are ASCII,
-    unsafe { Domain::<str>::ref_cast(core::str::from_utf8_unchecked(&self.0)) }
+    match core::str::from_utf8(&self.0) {
+      Ok(domain) => Domain::<str>::ref_cast(domain),
+      Err(_) => panic!("Domain<[u8]> invariant requires valid UTF-8 domain data"),
+    }
+  }
+}
+
+impl<'a> TryFrom<&'a str> for Domain<&'a str> {
+  type Error = ParseDomainError;
+
+  fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    {
+      match Domain::try_from_str(value)? {
+        either::Either::Left(domain) => Ok(domain),
+        either::Either::Right(_) => Err(ParseDomainError(())),
+      }
+    }
+
+    #[cfg(not(any(feature = "alloc", feature = "std")))]
+    {
+      Domain::try_from_ascii_str(value)
+        .map(|_| Self(value))
+        .map_err(|_| ParseDomainError(()))
+    }
+  }
+}
+
+impl<'a> TryFrom<&'a [u8]> for Domain<&'a [u8]> {
+  type Error = ParseDomainError;
+
+  fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    {
+      match Domain::try_from_bytes(value)? {
+        either::Either::Left(domain) => Ok(domain),
+        either::Either::Right(_) => Err(ParseDomainError(())),
+      }
+    }
+
+    #[cfg(not(any(feature = "alloc", feature = "std")))]
+    {
+      Domain::try_from_ascii_bytes(value)
+        .map(|_| Self(value))
+        .map_err(|_| ParseDomainError(()))
+    }
   }
 }
 
@@ -698,9 +775,35 @@ const _: () = {
   };
 
   use idna::{
-    uts46::{verify_dns_length, ErrorPolicy, Hyphens, ProcessingSuccess, Uts46},
+    uts46::{ErrorPolicy, Hyphens, ProcessingSuccess, Uts46},
     AsciiDenyList,
   };
+
+  impl<'a> TryFrom<Cow<'a, str>> for Domain<Cow<'a, str>> {
+    type Error = ParseDomainError;
+
+    fn try_from(value: Cow<'a, str>) -> Result<Self, Self::Error> {
+      match value {
+        Cow::Borrowed(value) => Domain::<Cow<'a, str>>::try_from(value),
+        Cow::Owned(value) => {
+          Domain::<String>::try_from(value).map(|domain| Self(Cow::Owned(domain.into_inner())))
+        }
+      }
+    }
+  }
+
+  impl<'a> TryFrom<Cow<'a, [u8]>> for Domain<Cow<'a, [u8]>> {
+    type Error = ParseDomainError;
+
+    fn try_from(value: Cow<'a, [u8]>) -> Result<Self, Self::Error> {
+      match value {
+        Cow::Borrowed(value) => Domain::<Cow<'a, [u8]>>::try_from(value),
+        Cow::Owned(value) => {
+          Domain::<Vec<u8>>::try_from(value).map(|domain| Self(Cow::Owned(domain.into_inner())))
+        }
+      }
+    }
+  }
 
   impl<S> Domain<S> {
     /// Parses a domain name from `&[u8]`.
@@ -740,14 +843,6 @@ const _: () = {
     where
       S: AsRef<[u8]>,
     {
-      macro_rules! validate_length {
-        ($buf:expr) => {{
-          if !verify_dns_length($buf, true) {
-            return Err(ParseDomainError(()));
-          }
-        }};
-      }
-
       let domain = input.as_ref();
       // We have percent encoded bytes, so we need to decode them.
       if Memchr::new(b'%', domain).next().is_some() {
@@ -765,12 +860,12 @@ const _: () = {
         }
 
         let mut sinker = Buffer::new();
-        let buf = match domain_to_ascii(input, &mut sinker)? {
+        let buf = match domain_to_ascii(input, BufferWriter(&mut sinker))? {
           either::Either::Left(_) => domain_buf,
           either::Either::Right(_) => sinker,
         };
 
-        validate_length!(buf.as_str());
+        verify_ascii_domain(buf.as_bytes()).map_err(|_| ParseDomainError(()))?;
         return Ok(either::Either::Right(buf));
       }
 
@@ -781,13 +876,14 @@ const _: () = {
       }
 
       let mut sinker = Buffer::new();
-      Ok(match domain_to_ascii(domain, &mut sinker)? {
+      Ok(match domain_to_ascii(domain, BufferWriter(&mut sinker))? {
         either::Either::Left(_) => {
-          validate_length!(from_utf8(domain).map_err(|_| ParseDomainError(()))?);
+          let domain = from_utf8(domain).map_err(|_| ParseDomainError(()))?;
+          verify_ascii_domain(domain.as_bytes()).map_err(|_| ParseDomainError(()))?;
           either::Either::Left(Self(input))
         }
         either::Either::Right(_) => {
-          validate_length!(sinker.as_str());
+          verify_ascii_domain(sinker.as_bytes()).map_err(|_| ParseDomainError(()))?;
           either::Either::Right(sinker)
         }
       })
@@ -891,10 +987,10 @@ const _: () = {
 
   impl_try_from!(
     @bytes
-    |d: Domain<_>| unsafe { core::str::from_utf8_unchecked(d.0) }.to_string() => String,
-    |d: Domain<_>| std::sync::Arc::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => std::sync::Arc<str>,
-    |d: Domain<_>| std::boxed::Box::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => std::boxed::Box<str>,
-    |d: Domain<_>| std::rc::Rc::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => std::rc::Rc<str>,
+    |d: Domain<_>| from_utf8(d.0).expect("validated domain is valid UTF-8").to_string() => String,
+    |d: Domain<_>| std::sync::Arc::from(from_utf8(d.0).expect("validated domain is valid UTF-8")) => std::sync::Arc<str>,
+    |d: Domain<_>| std::boxed::Box::from(from_utf8(d.0).expect("validated domain is valid UTF-8")) => std::boxed::Box<str>,
+    |d: Domain<_>| std::rc::Rc::from(from_utf8(d.0).expect("validated domain is valid UTF-8")) => std::rc::Rc<str>,
     |d: Domain<&[u8]>| d.0.to_vec() => Vec<u8>,
     |d: Domain<_>| std::sync::Arc::from(d.0) => std::sync::Arc<[u8]>,
     |d: Domain<_>| std::boxed::Box::from(d.0) => std::boxed::Box<[u8]>,
@@ -922,7 +1018,7 @@ const _: () = {
     let result = uts46.process(
       domain,
       AsciiDenyList::URL,
-      Hyphens::Allow,
+      Hyphens::CheckFirstLast,
       ErrorPolicy::FailFast,
       |_, _, _| false, // Force ToASCII processing
       &mut sinker,
@@ -948,7 +1044,7 @@ const _: () = {
     |d: Domain<_>| SmolStr::from(d.0) => SmolStr,
   );
   impl_try_from!(@bytes
-    |d: Domain<_>| SmolStr::from(unsafe { core::str::from_utf8_unchecked(d.0) }) => SmolStr,
+    |d: Domain<_>| SmolStr::from(from_utf8(d.0).expect("validated domain is valid UTF-8")) => SmolStr,
   );
   impl_try_from!(@owned try_from_str(as_str, SmolStr));
 
@@ -1073,51 +1169,22 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
     AsciiDenyList,
   };
 
-  #[derive(Default)]
-  struct Eat {
-    len: usize,
-    last: u8,
-  }
-
-  impl core::fmt::Write for Eat {
-    fn write_str(&mut self, val: &str) -> core::fmt::Result {
-      self.len += val.len();
-      if let Some(last) = val.as_bytes().last() {
-        self.last = *last;
-      }
-      Ok(())
-    }
-  }
-
-  fn domain_to_ascii(domain: &[u8], sinker: &mut Eat) -> Result<(), ParseDomainError> {
+  fn domain_to_ascii(domain: &[u8], sinker: &mut Buffer) -> Result<(), ParseDomainError> {
     let uts46 = Uts46::new();
+    let mut writer = BufferWriter(sinker);
     let result = uts46.process(
       domain,
       AsciiDenyList::URL,
-      Hyphens::Allow,
+      Hyphens::CheckFirstLast,
       ErrorPolicy::FailFast,
       |_, _, _| false, // Force ToASCII processing
-      sinker,
+      &mut writer,
       None,
     );
     match result {
       Ok(_) => Ok(()),
       Err(_) => Err(ParseDomainError(())),
     }
-  }
-
-  macro_rules! validate_length {
-    ($eat:ident) => {{
-      if $eat.len > 0 {
-        if $eat.last == b'.' {
-          if $eat.len > 254 {
-            return Err(ParseDomainError(()));
-          }
-        } else if $eat.len > 253 {
-          return Err(ParseDomainError(()));
-        }
-      }
-    }};
   }
 
   let domain = input;
@@ -1134,20 +1201,18 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
       return verify_ascii_domain(input).map_err(|_| ParseDomainError(()));
     }
 
-    let mut eat = Eat::default();
-    domain_to_ascii(input, &mut eat)?;
-    validate_length!(eat);
-    return Ok(());
+    let mut output = Buffer::new();
+    domain_to_ascii(input, &mut output)?;
+    return verify_ascii_domain(output.as_bytes()).map_err(|_| ParseDomainError(()));
   }
 
   if domain.is_ascii() {
     return verify_ascii_domain(domain).map_err(|_| ParseDomainError(()));
   }
 
-  let mut eat = Eat::default();
-  domain_to_ascii(domain, &mut eat)?;
-  validate_length!(eat);
-  Ok(())
+  let mut output = Buffer::new();
+  domain_to_ascii(domain, &mut output)?;
+  verify_ascii_domain(output.as_bytes()).map_err(|_| ParseDomainError(()))
 }
 
 /// Verifies that the input is a valid ASCII domain name. The input

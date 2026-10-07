@@ -15,7 +15,14 @@ use super::Domain;
 #[cfg(test)]
 mod tests;
 
-/// The host name
+/// The host name.
+///
+/// Equality, ordering, and hashing preserve the stored domain representation
+/// and are case-sensitive. DNS-insensitive identity is a caller policy.
+///
+/// `Host::Domain` is a public escape hatch for caller-provided storage and does
+/// not validate that storage. Use parsing or `TryFrom` when validation is
+/// required; callers constructing this variant directly own the invariant.
 #[derive(
   Clone,
   Copy,
@@ -29,7 +36,7 @@ mod tests;
   derive_more::IsVariant,
   derive_more::Unwrap,
 )]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[unwrap(ref, ref_mut)]
 pub enum Host<S> {
@@ -37,6 +44,33 @@ pub enum Host<S> {
   Ip(IpAddr),
   /// A DNS domain name
   Domain(S),
+}
+
+#[cfg(feature = "serde")]
+impl<'de, S> serde::Deserialize<'de> for Host<S>
+where
+  S: serde::Deserialize<'de>,
+  Domain<S>: TryFrom<S>,
+  <Domain<S> as TryFrom<S>>::Error: core::fmt::Display,
+{
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    enum Repr<T> {
+      Ip(IpAddr),
+      Domain(T),
+    }
+
+    match Repr::<S>::deserialize(deserializer)? {
+      Repr::Ip(ip) => Ok(Self::Ip(ip)),
+      Repr::Domain(domain) => Domain::try_from(domain)
+        .map(|domain| Self::Domain(domain.into_inner()))
+        .map_err(serde::de::Error::custom),
+    }
+  }
 }
 
 #[cfg(feature = "cheap-clone")]

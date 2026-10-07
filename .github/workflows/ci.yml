@@ -21,6 +21,9 @@ on:
   schedule: 
     - cron: "0 1 1 * *"
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
@@ -44,6 +47,49 @@ jobs:
         run: rustup update stable --no-self-update && rustup default stable
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+  # Check the exact minimum supported Rust version.
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust 1.89.0
+        run: rustup toolchain install 1.89.0 --profile minimal
+      - name: Check supported feature sets
+        run: |
+          cargo +1.89.0 check
+          cargo +1.89.0 check --all-features
+          cargo +1.89.0 check --no-default-features
+
+  # Keep no_std combinations buildable on a bare-metal target.
+  no-std:
+    name: no_std
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust and bare-metal target
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add thumbv7em-none-eabihf --toolchain stable
+      - name: Check no_std feature combinations
+        run: |
+          cargo +stable check --target thumbv7em-none-eabihf --no-default-features
+          cargo +stable check --target thumbv7em-none-eabihf --no-default-features --features serde
+          cargo +stable check --target thumbv7em-none-eabihf --no-default-features --features alloc
+          cargo +stable check --target thumbv7em-none-eabihf --no-default-features --features alloc,serde
+
+  feature-powerset:
+    name: feature-powerset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: rustup update stable --no-self-update && rustup default stable
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+      - name: Check feature powerset
+        run: cargo hack check --feature-powerset --depth 2 --no-dev-deps
 
   # Apply clippy lints
   clippy:
@@ -169,6 +215,9 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - rustfmt
+      - msrv
+      - no-std
+      - feature-powerset
       - clippy
       - build
       - cross

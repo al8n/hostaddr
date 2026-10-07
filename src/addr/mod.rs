@@ -9,6 +9,7 @@ use core::{
 mod tests;
 
 /// An error which can be returned when parsing a [`HostAddr`].
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum ParseHostAddrError {
   /// Returned if the provided str does not contains a valid host.
@@ -27,6 +28,7 @@ impl ParseHostAddrError {
 }
 
 /// An error which can be returned when parsing a [`HostAddr`].
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum ParseAsciiHostAddrError {
   /// Returned if the provided str does not contains a valid host.
@@ -45,13 +47,44 @@ impl ParseAsciiHostAddrError {
 }
 
 /// A host address, which consists of a [`Host`] and an optional port number.
+///
+/// Equality, ordering, and hashing preserve the stored host representation and
+/// are case-sensitive for domain names; the port remains part of the identity.
+///
+/// `HostAddr::new`, `set_host`, and `with_host` accept caller-provided `Host`
+/// storage directly and do not validate it. Parsing, `TryFrom`, and
+/// `From<Domain<_>>` are the validating entry points; callers using these
+/// methods directly own the domain invariant.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct HostAddr<S> {
   /// The host name
   pub(super) host: Host<S>,
   /// The port number
   pub(super) port: Option<u16>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de, S> serde::Deserialize<'de> for HostAddr<S>
+where
+  S: serde::Deserialize<'de>,
+  Domain<S>: TryFrom<S>,
+  <Domain<S> as TryFrom<S>>::Error: core::fmt::Display,
+{
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    #[derive(serde::Deserialize)]
+    #[serde(bound(deserialize = "Host<T>: serde::Deserialize<'de>"))]
+    struct Repr<T> {
+      host: Host<T>,
+      port: Option<u16>,
+    }
+
+    let Repr { host, port } = Repr::<S>::deserialize(deserializer)?;
+    Ok(Self { host, port })
+  }
 }
 
 #[cfg(feature = "cheap-clone")]
@@ -222,6 +255,8 @@ impl<S> From<SocketAddrV6> for HostAddr<S> {
   /// let host = HostAddr::<String>::from(addr);
   /// # }
   /// ```
+  ///
+  /// IPv6 `flowinfo` and `scope_id` are intentionally discarded.
   fn from(addr: SocketAddrV6) -> Self {
     Self::from_sock_addr(SocketAddr::V6(addr))
   }
@@ -406,6 +441,9 @@ impl<S> HostAddr<S> {
   /// println!("{}", host);
   /// # }
   /// ```
+  ///
+  /// IPv6 `flowinfo` and `scope_id` are not stored; `to_socket_addr` returns
+  /// zero values for both fields.
   #[inline]
   pub const fn from_sock_addr(addr: SocketAddr) -> Self {
     Self {
@@ -1164,27 +1202,27 @@ fn try_parse_v6<S>(s: &str) -> Result<Option<HostAddr<S>>, ParseHostAddrError> {
   if let Some(without_prefix) = s.strip_prefix('[') {
     // Ipv6 and no port
     if let Some(ip) = without_prefix.strip_suffix(']') {
-      return ip
-        .parse()
-        .map_err(|_| ParseHostAddrError::host())
-        .map(|addr| Some(HostAddr::from_ip_addr(addr)));
+      let ip = ip
+        .parse::<Ipv6Addr>()
+        .map_err(|_| ParseHostAddrError::host())?;
+      return Ok(Some(HostAddr::from_ip_addr(IpAddr::V6(ip))));
     }
 
     // Ipv6 with port
-    let mut parts = s.rsplitn(2, ':');
+    let (ip, port) = without_prefix
+      .split_once("]:")
+      .ok_or(ParseHostAddrError::host())?;
+    let ip = ip
+      .parse::<Ipv6Addr>()
+      .map_err(|_| ParseHostAddrError::host())?;
+    let port = port.parse().map_err(ParseHostAddrError::Port)?;
+    return Ok(Some(HostAddr::from_sock_addr(SocketAddr::V6(
+      SocketAddrV6::new(ip, port, 0, 0),
+    ))));
+  }
 
-    let port = parts.next();
-    let host = parts.next();
-
-    match (host, port) {
-      (Some(host), Some(_)) if host.ends_with("]") => {
-        return s
-          .parse()
-          .map_err(|_| ParseHostAddrError::host())
-          .map(|addr| Some(HostAddr::from_sock_addr(addr)));
-      }
-      _ => return Err(ParseHostAddrError::host()),
-    }
+  if let Ok(ip) = s.parse::<Ipv6Addr>() {
+    return Ok(Some(HostAddr::from_ip_addr(IpAddr::V6(ip))));
   }
 
   Ok(None)

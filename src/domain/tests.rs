@@ -230,12 +230,13 @@ fn domain_owned_conversions_cover_storage_variants() {
   assert_eq!(buffer.const_as_str(), "example.com");
 
   let mut writable = Buffer::new();
-  core::fmt::Write::write_str(&mut writable, "example").unwrap();
-  core::fmt::Write::write_str(&mut writable, ".com").unwrap();
+  let mut writer = BufferWriter(&mut writable);
+  core::fmt::Write::write_str(&mut writer, "example").unwrap();
+  core::fmt::Write::write_str(&mut writer, ".com").unwrap();
   assert_eq!(writable.as_str(), "example.com");
 
   let too_long = "a".repeat(255);
-  assert!(core::fmt::Write::write_str(&mut Buffer::new(), &too_long).is_err());
+  assert!(core::fmt::Write::write_str(&mut BufferWriter(&mut Buffer::new()), &too_long).is_err());
   let mut full = Buffer::new();
   for _ in 0..254 {
     full.push(b'a').unwrap();
@@ -279,4 +280,224 @@ fn buffer_serde_uses_text_for_human_readable_and_bytes_for_binary() {
     let decoded: Buffer = bincode::deserialize(&binary).unwrap();
     assert_eq!(decoded.as_str(), "xn--0zwm56d.xn--fiqs8s");
   }
+}
+
+#[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
+#[test]
+fn domain_deserialize_validates_and_normalizes_owned_storage() {
+  use std::{string::String, vec::Vec};
+
+  for invalid in ["", "-example.com", "example-.com", "example.123"] {
+    let json = serde_json::to_string(invalid).unwrap();
+    assert!(
+      serde_json::from_str::<Domain<String>>(&json).is_err(),
+      "accepted invalid JSON domain: {invalid:?}"
+    );
+
+    let bincode = bincode::serialize(invalid).unwrap();
+    assert!(
+      bincode::deserialize::<Domain<String>>(&bincode).is_err(),
+      "accepted invalid bincode domain: {invalid:?}"
+    );
+
+    let msgpack = rmp_serde::to_vec(invalid).unwrap();
+    assert!(
+      rmp_serde::from_slice::<Domain<String>>(&msgpack).is_err(),
+      "accepted invalid MessagePack domain: {invalid:?}"
+    );
+  }
+
+  let invalid_utf8 = Vec::from([0xff]);
+  let json = serde_json::to_string(&invalid_utf8).unwrap();
+  assert!(serde_json::from_str::<Domain<Vec<u8>>>(&json).is_err());
+  let bincode = bincode::serialize(&invalid_utf8).unwrap();
+  assert!(bincode::deserialize::<Domain<Vec<u8>>>(&bincode).is_err());
+  let msgpack = rmp_serde::to_vec(&invalid_utf8).unwrap();
+  assert!(rmp_serde::from_slice::<Domain<Vec<u8>>>(&msgpack).is_err());
+
+  for encoded in ["example.com", "测试.中国"] {
+    let expected = if encoded.is_ascii() {
+      encoded
+    } else {
+      "xn--0zwm56d.xn--fiqs8s"
+    };
+
+    let json = serde_json::to_string(encoded).unwrap();
+    let domain: Domain<String> = serde_json::from_str(&json).unwrap();
+    assert_eq!(domain.as_inner(), expected);
+
+    let bincode = bincode::serialize(encoded).unwrap();
+    let domain: Domain<String> = bincode::deserialize(&bincode).unwrap();
+    assert_eq!(domain.as_inner(), expected);
+
+    let msgpack = rmp_serde::to_vec(encoded).unwrap();
+    let domain: Domain<String> = rmp_serde::from_slice(&msgpack).unwrap();
+    assert_eq!(domain.as_inner(), expected);
+  }
+}
+
+#[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
+#[test]
+fn cow_domain_serde_validates_owned_and_borrowed_storage() {
+  use std::{borrow::Cow, fmt::Debug, string::String, vec::Vec};
+
+  fn assert_roundtrips<T>(value: &T)
+  where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + Debug,
+  {
+    let json = serde_json::to_string(value).unwrap();
+    assert_eq!(serde_json::from_str::<T>(&json).unwrap(), *value);
+
+    let bincode = bincode::serialize(value).unwrap();
+    assert_eq!(bincode::deserialize::<T>(&bincode).unwrap(), *value);
+
+    let msgpack = rmp_serde::to_vec(value).unwrap();
+    assert_eq!(rmp_serde::from_slice::<T>(&msgpack).unwrap(), *value);
+  }
+
+  fn assert_rejected<T, W>(wire: &W)
+  where
+    T: serde::de::DeserializeOwned,
+    W: serde::Serialize,
+  {
+    let json = serde_json::to_string(wire).unwrap();
+    assert!(serde_json::from_str::<T>(&json).is_err());
+
+    let bincode = bincode::serialize(wire).unwrap();
+    assert!(bincode::deserialize::<T>(&bincode).is_err());
+
+    let msgpack = rmp_serde::to_vec(wire).unwrap();
+    assert!(rmp_serde::from_slice::<T>(&msgpack).is_err());
+  }
+
+  let borrowed: Domain<Cow<'static, str>> = Domain::try_from(Cow::Borrowed("example.com")).unwrap();
+  assert!(matches!(borrowed.as_inner(), Cow::Borrowed(_)));
+  assert_roundtrips(&borrowed);
+  let owned: Domain<Cow<'static, str>> =
+    Domain::try_from(Cow::Owned(String::from("example.org"))).unwrap();
+  assert!(matches!(owned.as_inner(), Cow::Owned(_)));
+  assert_roundtrips(&owned);
+
+  let borrowed: Domain<Cow<'static, [u8]>> =
+    Domain::try_from(Cow::Borrowed(&b"example.com"[..])).unwrap();
+  assert!(matches!(borrowed.as_inner(), Cow::Borrowed(_)));
+  assert_roundtrips(&borrowed);
+  let owned: Domain<Cow<'static, [u8]>> =
+    Domain::try_from(Cow::Owned(Vec::from(&b"example.org"[..]))).unwrap();
+  assert!(matches!(owned.as_inner(), Cow::Owned(_)));
+  assert_roundtrips(&owned);
+
+  assert!(Domain::<Cow<'static, str>>::try_from(Cow::Borrowed("")).is_err());
+  assert!(Domain::<Cow<'static, [u8]>>::try_from(Cow::Borrowed(&[0xff][..])).is_err());
+
+  for (input, expected) in [
+    ("测试.中国", "xn--0zwm56d.xn--fiqs8s"),
+    ("example%2Ecom", "example.com"),
+  ] {
+    let domain: Domain<Cow<'static, str>> = Domain::try_from(Cow::Borrowed(input)).unwrap();
+    assert!(matches!(domain.as_inner(), Cow::Owned(_)));
+    assert_eq!(domain.as_inner().as_ref(), expected);
+
+    let domain: Domain<Cow<'static, [u8]>> =
+      Domain::try_from(Cow::Borrowed(input.as_bytes())).unwrap();
+    assert!(matches!(domain.as_inner(), Cow::Owned(_)));
+    assert_eq!(domain.as_inner().as_ref(), expected.as_bytes());
+  }
+
+  let invalid = Domain::new_unchecked(Cow::Borrowed(""));
+  assert_rejected::<Domain<Cow<'static, str>>, _>(&invalid);
+  let invalid: Domain<Cow<'static, str>> =
+    Domain::new_unchecked(Cow::Owned(String::from("example.123")));
+  assert_rejected::<Domain<Cow<'static, str>>, _>(&invalid);
+  let invalid = Domain::new_unchecked(Cow::Borrowed(&[0xff][..]));
+  assert_rejected::<Domain<Cow<'static, [u8]>>, _>(&invalid);
+  let invalid: Domain<Cow<'static, [u8]>> =
+    Domain::new_unchecked(Cow::Owned(Vec::from(&b"-example.com"[..])));
+  assert_rejected::<Domain<Cow<'static, [u8]>>, _>(&invalid);
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
+fn idna_output_reuses_ascii_domain_policy() {
+  use std::string::String;
+
+  for input in [
+    "-foo.测试",
+    "foo-.测试",
+    "测试.123",
+    "-foo%2E测试",
+    "foo-%2E测试",
+  ] {
+    assert!(
+      Domain::<String>::try_from(input).is_err(),
+      "accepted {input:?}"
+    );
+    assert!(
+      verify_domain(input.as_bytes()).is_err(),
+      "verified {input:?}"
+    );
+  }
+
+  for input in [
+    "foo_bar.测试",
+    "ab--cd.example",
+    "ab--cd.测试",
+    "测试.中国.",
+    "example%2E测试",
+    "ab--cd%2E测试",
+  ] {
+    assert!(
+      Domain::<String>::try_from(input).is_ok(),
+      "rejected {input:?}"
+    );
+    assert!(
+      verify_domain(input.as_bytes()).is_ok(),
+      "rejected {input:?}"
+    );
+  }
+
+  let unicode: Domain<String> = Domain::try_from("ab--cd.测试").unwrap();
+  let percent: Domain<String> = Domain::try_from("ab--cd%2E测试").unwrap();
+  assert_eq!(unicode, percent);
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
+fn domain_equality_ordering_and_hash_follow_storage_representation() {
+  use std::{borrow::Cow, boxed::Box, rc::Rc, string::String, sync::Arc, vec::Vec};
+
+  let lower: Domain<String> = Domain::try_from("example.com").unwrap();
+  let upper: Domain<String> = Domain::try_from("EXAMPLE.COM").unwrap();
+  assert_ne!(lower, upper);
+  assert_ne!(lower.cmp(&upper), core::cmp::Ordering::Equal);
+
+  #[cfg(feature = "std")]
+  {
+    use std::collections::HashSet;
+
+    let mut set = HashSet::new();
+    set.insert(lower.clone());
+    set.insert(upper.clone());
+    assert_eq!(set.len(), 2);
+  }
+
+  let bytes: Domain<Vec<u8>> = Domain::try_from(b"ExAmPlE.CoM".as_slice()).unwrap();
+  let buffer: Domain<Buffer> = Domain::try_from("eXaMpLe.CoM").unwrap();
+  assert_ne!(bytes, Domain::try_from(b"example.com".as_slice()).unwrap());
+  assert_ne!(buffer, Domain::try_from("example.com").unwrap());
+
+  fn assert_storage_traits<T: Eq + Ord + core::hash::Hash>(value: T) {
+    let _ = value;
+  }
+  assert_storage_traits(lower);
+  assert_storage_traits(upper.clone());
+  assert_storage_traits(bytes);
+  assert_storage_traits(buffer);
+  assert_storage_traits(Domain::<Arc<str>>::try_from("example.com").unwrap());
+  assert_storage_traits(Domain::<Rc<str>>::try_from("example.com").unwrap());
+  assert_storage_traits(Domain::<Box<str>>::try_from("example.com").unwrap());
+  assert_storage_traits(Domain::<Cow<'_, str>>::try_from("example.com").unwrap());
+
+  let fqdn: Domain<String> = Domain::try_from("EXAMPLE.COM.").unwrap();
+  assert_ne!(upper, fqdn);
 }

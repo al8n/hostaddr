@@ -29,12 +29,32 @@ Type-safe, validated DNS domain names, hosts, and host addresses for Rust.
 
 All types are generic over their storage backend `S`, allowing you to choose the representation that best fits your use case -- from zero-alloc stack buffers (`Buffer`) to shared smart pointers (`Arc<str>`).
 
+`Domain`, `Host`, and `HostAddr` use representation-sensitive, case-sensitive
+`Eq`, `Ord`, and `Hash` implementations. DNS queries are commonly
+case-insensitive, but callers should normalize names explicitly before using
+them as identity keys when that is the desired policy.
+
+## Release status
+
+The latest published release is `0.3.0`. `1.0.0` has not been published yet; the
+roadmap below describes the remaining release contract.
+
+The planned `1.0.0` release will:
+
+- freeze the validated host/address and IPC taxonomy APIs;
+- require Rust `1.89` or newer;
+- keep `no_std`/`no-alloc` and `alloc` feature combinations buildable; and
+- document the Serde representation and compatibility policy.
+
+Until `1.0.0` is released, downstream users should depend on the published
+`0.3` line and treat the `1.0` work as pre-release.
+
 ## Features
 
 - **`no_std` and `no-alloc` compatible**: Use the `Buffer` type for stack-allocated domains without any heap allocation
 - **Generic storage**: Works with `String`, `Arc<str>`, `Box<str>`, `Vec<u8>`, `SmolStr`, `Bytes`, and more
 - **IDNA/Punycode support**: Automatic conversion of international domain names (e.g. `测试.中国` to punycode)
-- **Type-safe validation**: Domain names are validated at construction time per RFC 1035 rules
+- **Type-safe validation**: Domain names follow this crate's ASCII and UTS46/IDNA validation policy
 - **Percent-encoding**: Transparent decoding of percent-encoded domains
 - **IPv4/IPv6**: Full support for IP addresses, including proper `[::1]:port` bracket syntax
 - **Semantic IP/socket wrappers**: `LoopbackIpAddr`/`LoopbackAddr`, `PrivateIpAddr`/`PrivateAddr`, and other validated address classes
@@ -46,14 +66,14 @@ All types are generic over their storage backend `S`, allowing you to choose the
 
 ```toml
 [dependencies]
-hostaddr = "0.2"
+hostaddr = "0.3"
 ```
 
 ### Feature Flags
 
 | Feature | Description |
 |---------|-------------|
-| **`std`** (default) | Standard library support, enables IDNA and percent-decoding |
+| **`std`** (default) | Standard library support layered over `alloc`, enables IDNA and percent-decoding |
 | **`vsock`** (default) | Linux VM socket address support through `VsockAddr` and `IpcAddr::Vsock` |
 | **`alloc`** | Allocation support without `std` |
 | **`serde`** | Serialize/deserialize support |
@@ -67,7 +87,9 @@ hostaddr = "0.2"
 
 ## Quick Start
 
-```rust,ignore
+```rust
+#[cfg(feature = "std")]
+{
 use hostaddr::HostAddr;
 
 // Domain with port
@@ -86,6 +108,7 @@ assert_eq!(addr.to_string(), "[::1]:443");
 
 // International domain names (auto punycode)
 let addr: HostAddr<String> = "测试.中国:80".parse().unwrap();
+}
 ```
 
 ## Address Taxonomy
@@ -105,6 +128,42 @@ The transparent IPC wrappers support borrowed DST storage such as
 `&UnixAddr<Path>` on Unix and `&AbstractAddr<[u8]>` on Linux. Windows named-pipe
 addresses are exposed through `NamedPipeAddr`; Linux `VsockAddr` support is
 available through the default-enabled `vsock` feature.
+
+IPC values are representation wrappers only. Constructing one does not open a
+socket, inspect the filesystem, normalize a platform pathname, or prove that an
+endpoint is local or trusted. Callers must perform any OS-level validation and
+security checks required by their application.
+
+For Linux `AbstractAddr`, the payload is interpreted as the name after the
+kernel's leading-NUL marker. The wrapper stores the supplied bytes unchanged:
+it does not add, remove, or reject leading or interior NUL bytes, and
+`as_bytes` returns the original payload.
+
+`HostAddr` conversions from `SocketAddrV6` retain the IPv6 address and port but
+discard `flowinfo` and `scope_id`, because `HostAddr` stores only an IP address
+and optional port. Keep the original `SocketAddrV6` when those fields matter.
+
+The parsing and `TryFrom` entry points, plus `From<Domain<_>>`, validate domain
+invariants. The public `Host::Domain(S)` variant and
+`HostAddr::new`/`set_host`/`with_host` also accept caller-provided storage
+directly; callers using those escape hatches are responsible for preserving
+the domain invariant.
+
+### Serde compatibility
+
+Serde is optional. Human-readable formats use named variants (`host`, `ipc`,
+`loopback`) and textual IPC tags (`unix`, `abstract`, `named_pipe`, `vsock`).
+Binary formats use two-element tuples and stable numeric tags:
+
+| Type | Tags |
+|------|------|
+| `IpcAddr` | `unix = 0`, `abstract = 1`, `named_pipe = 2`, `vsock = 3` |
+| `Addr` | `host = 0`, `ipc = 1` |
+| `LocalAddr` | `loopback = 0`, `ipc = 1` |
+
+These tags and variant names are part of the `1.0.0` wire-format contract. New
+variants must not reuse an existing tag; deserialization also re-checks the
+validated domain and semantic-address invariants.
 
 ```rust
 use hostaddr::{Addr, HostAddr, LocalAddr, LoopbackAddr, PrivateIpAddr};
@@ -130,7 +189,9 @@ let local: LocalAddr<&str, &[u8]> = local_ip.into();
 
 ### Working with Domains
 
-```rust,ignore
+```rust
+#[cfg(feature = "std")]
+{
 use hostaddr::Domain;
 
 // Validated at construction -- invalid names are rejected
@@ -139,7 +200,7 @@ assert!(Domain::<String>::try_from("-invalid.com").is_err());
 
 // International domain names are converted to punycode
 let domain: Domain<String> = "测试.中国".parse().unwrap();
-assert_eq!(domain.as_inner().as_str(), "xn--g6w251d.xn--fiqz9s");
+assert_eq!(domain.as_inner().as_str(), "xn--0zwm56d.xn--fiqs8s");
 
 // FQDN support
 let domain: Domain<String> = "example.com.".parse().unwrap();
@@ -147,11 +208,14 @@ assert!(domain.is_fqdn());
 
 // ASCII-only fast path (no punycode or percent-decoding)
 let domain = Domain::try_from_ascii_str("example.com").unwrap();
+}
 ```
 
 ### Choosing a Storage Type
 
-```rust,ignore
+```rust
+#[cfg(feature = "std")]
+{
 use hostaddr::HostAddr;
 use std::sync::Arc;
 
@@ -163,11 +227,12 @@ let addr: HostAddr<Arc<str>> = "example.com:8080".parse().unwrap();
 
 // Byte storage
 let addr: HostAddr<Vec<u8>> = "example.com".parse().unwrap();
+}
 ```
 
 ### Stack-Allocated Domains (`no_std` / `no-alloc`)
 
-```rust,ignore
+```rust
 use hostaddr::{HostAddr, Buffer, Domain};
 
 // No heap allocation -- 255-byte stack buffer
@@ -177,7 +242,9 @@ let addr: HostAddr<Buffer> = HostAddr::try_from("example.com:443").unwrap();
 
 ### Manipulating Addresses
 
-```rust,ignore
+```rust
+#[cfg(feature = "std")]
+{
 use hostaddr::HostAddr;
 
 let mut addr: HostAddr<String> = "example.com".parse().unwrap();
@@ -188,11 +255,14 @@ assert_eq!(addr.to_string(), "example.com:8080");
 let addr = "example.com".parse::<HostAddr<String>>().unwrap()
     .with_default_port(443);
 assert_eq!(addr.port(), Some(443));
+}
 ```
 
 ### Verification Functions
 
-```rust,ignore
+```rust
+#[cfg(any(feature = "std", feature = "alloc"))]
+{
 use hostaddr::{verify_domain, verify_ascii_domain};
 
 assert!(verify_domain(b"example.com").is_ok());
@@ -200,6 +270,7 @@ assert!(verify_domain("测试.中国".as_bytes()).is_ok());
 
 assert!(verify_ascii_domain(b"example.com").is_ok());
 assert!(verify_ascii_domain("测试.中国".as_bytes()).is_err());
+}
 ```
 
 #### License

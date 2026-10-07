@@ -37,8 +37,8 @@ fn common_semantic_classes_validate_ip_and_socket_forms() {
   assert_addr_class!(
     LoopbackIpAddr,
     LoopbackAddr,
-    ["127.1.2.3", "::1"],
-    ["192.0.2.1", "::2"]
+    ["127.0.0.0", "127.255.255.255", "::1"],
+    ["126.255.255.255", "128.0.0.0", "::2"]
   );
   assert_addr_class!(
     PrivateIpAddr,
@@ -48,16 +48,31 @@ fn common_semantic_classes_validate_ip_and_socket_forms() {
       "172.16.0.1",
       "172.31.255.255",
       "192.168.1.1",
+      "192.168.255.255",
       "fc00::1",
       "fdff::1"
     ],
-    ["100.64.0.1", "172.32.0.1", "2001:db8::1"]
+    [
+      "9.255.255.255",
+      "11.0.0.0",
+      "172.15.255.255",
+      "172.32.0.0",
+      "192.167.255.255",
+      "192.169.0.0",
+      "fbff:ffff::",
+      "fe00::"
+    ]
   );
   assert_addr_class!(
     LinkLocalIpAddr,
     LinkLocalAddr,
-    ["169.254.1.1", "fe80::1"],
-    ["169.255.1.1", "fc00::1"]
+    [
+      "169.254.0.0",
+      "169.254.255.255",
+      "fe80::",
+      "febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+    ],
+    ["169.253.255.255", "169.255.0.0", "fe7f:ffff::", "fec0::"]
   );
   assert_addr_class!(
     DocumentationIpAddr,
@@ -66,29 +81,58 @@ fn common_semantic_classes_validate_ip_and_socket_forms() {
       "192.0.2.1",
       "198.51.100.1",
       "203.0.113.1",
+      "203.0.113.255",
       "2001:db8::1",
+      "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff",
       "3fff::",
       "3fff:0fff:ffff:ffff:ffff:ffff:ffff:ffff"
     ],
-    ["198.18.0.1", "2001:db9::1", "3fff:1000::"]
+    [
+      "192.0.1.255",
+      "192.0.3.0",
+      "198.51.99.255",
+      "198.51.101.0",
+      "203.0.112.255",
+      "203.0.114.0",
+      "2001:db7:ffff::",
+      "2001:db9::",
+      "3ffe:ffff::",
+      "3fff:1000::"
+    ]
   );
   assert_addr_class!(
     BenchmarkIpAddr,
     BenchmarkAddr,
-    ["198.18.0.1", "198.19.255.255", "2001:2::1"],
-    ["198.20.0.1", "2001:200::1", "2001:3::1"]
+    [
+      "198.18.0.0",
+      "198.19.255.255",
+      "2001:2::",
+      "2001:2:0:ffff:ffff:ffff:ffff:ffff"
+    ],
+    [
+      "198.17.255.255",
+      "198.20.0.0",
+      "2001:1:ffff::",
+      "2001:2:1::",
+      "2001:200::"
+    ]
   );
   assert_addr_class!(
     SharedIpAddr,
     SharedAddr,
-    ["100.64.0.1", "100.127.255.255"],
-    ["100.128.0.1", "10.0.0.1", "::1"]
+    ["100.64.0.0", "100.127.255.255"],
+    ["100.63.255.255", "100.128.0.0", "::1"]
   );
   assert_addr_class!(
     MulticastIpAddr,
     MulticastAddr,
-    ["224.0.0.1", "239.255.255.255", "ff02::1"],
-    ["240.0.0.1", "fe80::1"]
+    [
+      "224.0.0.0",
+      "239.255.255.255",
+      "ff00::",
+      "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+    ],
+    ["223.255.255.255", "240.0.0.0", "feff:ffff::"]
   );
   assert_addr_class!(
     UnspecifiedIpAddr,
