@@ -1,8 +1,8 @@
 # Address Abstraction Design (v2)
 
 > Status: the core taxonomy below is implemented in the `0.3.x` line and is
-> being stabilized for `1.0.0`. `1.0.0-rc.1` was published on 2026-10-07;
-> `1.0.0-rc.2` is the current validation target.
+> being stabilized for `1.0.0`. `1.0.0-rc.2` was published on 2026-10-08 and
+> is the current validation release; the final `1.0.0` remains pending.
 
 ## Goals
 

@@ -36,9 +36,9 @@ them as identity keys when that is the desired policy.
 
 ## Release status
 
-The latest published pre-release is `1.0.0-rc.1` (2026-10-07). The current
-branch targets `1.0.0-rc.2`; the release candidate is intended for downstream
-validation before the final `1.0.0` contract is frozen.
+The latest published pre-release is `1.0.0-rc.2` (2026-10-08). This release
+candidate is intended for downstream validation before the final `1.0.0`
+contract is frozen.
 
 The `1.0.0` release will:
 
@@ -72,11 +72,10 @@ pre-release and report compatibility findings against `1.0.0-rc.2`.
 
 ```toml
 [dependencies]
-hostaddr = "0.3"
+hostaddr = "=1.0.0-rc.2"
 ```
 
-To test the published release candidate, opt in explicitly with
-`hostaddr = "1.0.0-rc.1"`; the `rc.2` target is not published yet.
+The stable `0.3.x` line remains available as `hostaddr = "0.3"`.
 
 ### Feature Flags
 

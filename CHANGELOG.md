@@ -1,8 +1,9 @@
 # Unreleased
 
-## 1.0.0-rc.2 (Target)
+## 1.0.0-rc.2 (2026-10-08)
 
-> This section records the release-candidate work currently being validated.
+> Published release candidate. The final `1.0.0` release remains subject to
+> downstream validation and the compatibility checks described above.
 
 ### Domain and Serde correctness
 
