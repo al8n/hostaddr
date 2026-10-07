@@ -1,9 +1,34 @@
 # Unreleased
 
-## 1.0.0-rc.1 (Unreleased)
+## 1.0.0-rc.2 (Target)
 
-> This section describes work in progress for the not-yet-published `1.0.0`
-> release. It is not a release announcement.
+> This section records the release-candidate work currently being validated.
+
+### Domain and Serde correctness
+
+- Validate ASCII `xn--` A-labels through UTS46 on allocating domain parsers and
+  verification functions, while keeping the no-alloc ASCII entry points
+  structural-only.
+- Decode percent-encoded input into an allocating intermediate before applying
+  the final ASCII domain limit, so long Unicode input and its fully encoded
+  equivalent follow the same path.
+- Make `Buffer` deserialization accept borrowed, transient, and owned string
+  and byte visitors used by streaming and legacy Serde deserializers.
+
+### Portability and compatibility
+
+- Explicitly expose the `quickcheck` feature and enable its `wasm_js` random
+  backend so the all-features wasm build is supported.
+- Keep the host/address taxonomy migration source-visible while preserving the
+  `Addr`, `IpcAddr`, and `LocalAddr` Serde variant names and numeric tags.
+- Define the cross-platform IPC and Serde compatibility range as
+  `1.0.0-rc.1` through `1.0.x`: unavailable platform variants reject their
+  tags, and tags are never reused.
+
+## 1.0.0-rc.1 (2026-10-07)
+
+> Published release candidate. The final `1.0.0` release remains subject to
+> downstream validation and the compatibility checks described above.
 
 ## Soundness and correctness
 
@@ -40,6 +65,16 @@
 - Mark extensible parsing/address enums `non_exhaustive`.
 - Raise the MSRV to Rust `1.89`.
 
+## Migration notes
+
+The `0.3.x` host/address taxonomy is retained in `1.0`: `Addr` still
+separates host and IPC transports, while `LocalAddr` still separates loopback
+from IPC. Direct construction of a domain-like `Host::Domain` value is no
+longer an unchecked way to bypass the `Domain` invariant; use a parsing or
+conversion API to obtain the validated domain storage instead. This source
+change does not alter the serialized host variant or the stable IPC/address
+tags listed in the design document.
+
 # RELEASED
 
 ## 0.3.0 (Jul 2nd, 2026)
@@ -66,7 +101,8 @@ BUGFIXES
 FEATURES
 
 - Support `no-alloc` environment for ASCII only domain and hosts.
-- Add `verify_domain`, `verify_ascii_domain` and `verify_ascii_domain_allow_percent_encode`.
+- Add `verify_domain`, `verify_ascii_domain` and
+  `verify_ascii_domain_allow_percent_encoding`.
 - Add `as_str` and `as_bytes`
 
 ## 0.1.0 (Mar 24th, 2025)

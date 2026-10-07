@@ -79,6 +79,18 @@ jobs:
           cargo +stable check --target thumbv7em-none-eabihf --no-default-features --features alloc
           cargo +stable check --target thumbv7em-none-eabihf --no-default-features --features alloc,serde
 
+  wasm-all-features:
+    name: wasm-all-features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust and wasm target
+        run: |
+          rustup update stable --no-self-update
+          rustup target add wasm32-unknown-unknown
+      - name: Check supported wasm feature set
+        run: cargo +stable check --target wasm32-unknown-unknown --all-features
+
   feature-powerset:
     name: feature-powerset
     runs-on: ubuntu-latest

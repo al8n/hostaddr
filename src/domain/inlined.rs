@@ -355,10 +355,108 @@ impl Buffer {
 const _: () = {
   #[cfg(any(feature = "std", feature = "alloc"))]
   use either::Either;
+  #[cfg(any(feature = "std", feature = "alloc"))]
+  use std::{string::String, vec::Vec};
 
-  use serde::{Deserialize, Serialize};
+  use serde::{de, Deserialize, Serialize};
 
   use super::Domain;
+
+  struct BufferVisitor;
+
+  impl BufferVisitor {
+    fn from_str<E>(value: &str) -> Result<Buffer, E>
+    where
+      E: de::Error,
+    {
+      #[cfg(any(feature = "std", feature = "alloc"))]
+      {
+        let res = Domain::try_from_str(value).map_err(E::custom)?;
+        Ok(match res {
+          Either::Left(d) => Buffer::copy_from_slice(d.0.as_bytes()),
+          Either::Right(d) => d,
+        })
+      }
+
+      #[cfg(not(any(feature = "std", feature = "alloc")))]
+      {
+        let res = Domain::try_from_ascii_str(value).map_err(E::custom)?;
+        Ok(Buffer::copy_from_slice(res.0.as_bytes()))
+      }
+    }
+
+    fn from_bytes<E>(value: &[u8]) -> Result<Buffer, E>
+    where
+      E: de::Error,
+    {
+      #[cfg(any(feature = "std", feature = "alloc"))]
+      {
+        let res = Domain::try_from_bytes(value).map_err(E::custom)?;
+        Ok(match res {
+          Either::Left(d) => Buffer::copy_from_slice(d.0),
+          Either::Right(d) => d,
+        })
+      }
+
+      #[cfg(not(any(feature = "std", feature = "alloc")))]
+      {
+        let res = Domain::try_from_ascii_bytes(value).map_err(E::custom)?;
+        Ok(Buffer::copy_from_slice(&res.0))
+      }
+    }
+  }
+
+  impl<'de> de::Visitor<'de> for BufferVisitor {
+    type Value = Buffer;
+
+    fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+      formatter.write_str("a valid domain string or byte sequence")
+    }
+
+    fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Self::from_str(value)
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Self::from_str(value)
+    }
+
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Self::from_str(&value)
+    }
+
+    fn visit_borrowed_bytes<E>(self, value: &'de [u8]) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Self::from_bytes(value)
+    }
+
+    fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Self::from_bytes(value)
+    }
+
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    fn visit_byte_buf<E>(self, value: Vec<u8>) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Self::from_bytes(&value)
+    }
+  }
 
   impl Serialize for Buffer {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -379,40 +477,17 @@ const _: () = {
       D: serde::Deserializer<'de>,
     {
       if deserializer.is_human_readable() {
-        let s = <&str>::deserialize(deserializer)?;
-
         #[cfg(any(feature = "std", feature = "alloc"))]
-        {
-          let res = Domain::try_from_str(s).map_err(serde::de::Error::custom)?;
-
-          Ok(match res {
-            Either::Left(d) => Self::copy_from_slice(d.0.as_bytes()),
-            Either::Right(d) => d,
-          })
-        }
+        return deserializer.deserialize_string(BufferVisitor);
 
         #[cfg(not(any(feature = "std", feature = "alloc")))]
-        {
-          let res = Domain::try_from_ascii_str(s).map_err(serde::de::Error::custom)?;
-          Ok(Self::copy_from_slice(res.0.as_bytes()))
-        }
+        return deserializer.deserialize_str(BufferVisitor);
       } else {
-        let bytes = <&[u8]>::deserialize(deserializer)?;
-
         #[cfg(any(feature = "std", feature = "alloc"))]
-        {
-          let res = Domain::try_from_bytes(bytes).map_err(serde::de::Error::custom)?;
-          Ok(match res {
-            Either::Left(d) => Self::copy_from_slice(d.0),
-            Either::Right(d) => d,
-          })
-        }
+        return deserializer.deserialize_byte_buf(BufferVisitor);
 
         #[cfg(not(any(feature = "std", feature = "alloc")))]
-        {
-          let res = Domain::try_from_ascii_bytes(bytes).map_err(serde::de::Error::custom)?;
-          Ok(Self::copy_from_slice(&res.0))
-        }
+        return deserializer.deserialize_bytes(BufferVisitor);
       }
     }
   }

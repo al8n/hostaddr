@@ -1,6 +1,6 @@
 [package]
 name = "hostaddr"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
@@ -14,6 +14,7 @@ keywords = ["dns", "domain", "hostname", "host", "address"]
 default = ["std", "vsock"]
 vsock = []
 alloc = [
+  "dep:idna",
   "idna/alloc",
   "idna/compiled_data",
   "percent-encoding/alloc",
@@ -59,6 +60,7 @@ serde = [
 ]
 
 arbitrary = ["dep:arbitrary", "smol_str_0_3?/arbitrary", "tinyvec_1?/arbitrary", "smallvec_1?/arbitrary"]
+quickcheck = ["dep:quickcheck", "dep:getrandom", "getrandom/wasm_js"]
 
 [dependencies]
 derive_more = { version = "2", default-features = false, features = ["display", "from", "is_variant", "unwrap", "try_unwrap", "as_ref"] }
@@ -71,6 +73,7 @@ thiserror = { version = "2", default-features = false }
 cheap-clone = { version = "0.3", default-features = false, optional = true }
 
 idna = { version = "1", default-features = false, optional = true }
+getrandom = { version = "0.4", default-features = false, optional = true }
 
 bytes_1 = { package = "bytes", version = "1", default-features = false, optional = true }
 smol_str_0_3 = { package = "smol_str", version = "0.3", default-features = false, optional = true }

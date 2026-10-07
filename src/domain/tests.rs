@@ -16,6 +16,38 @@ fn negative_try_from_ascii_str() {
   assert_eq!(err.as_str(), "invalid ASCII domain");
 }
 
+#[test]
+fn ascii_structural_paths_do_not_decode_ace_payloads() {
+  // These labels are structurally valid ASCII but are rejected by the
+  // alloc-aware IDNA path below. The no-alloc API deliberately remains a
+  // structural check and cannot validate an ACE payload without IDNA data.
+  for input in [b"xn--0.pt".as_slice(), b"xn--a.pt", b"xn--u-ccb.ru"] {
+    assert!(Domain::<[u8]>::try_from_ascii_bytes(input).is_ok());
+    assert!(verify_ascii_domain(input).is_ok());
+  }
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
+fn alloc_paths_validate_ascii_alabels_with_idna() {
+  // Valid/invalid examples are taken from the idna crate's UTS #46 test
+  // vectors (including the regression for https://github.com/servo/rust-url/issues/373).
+  for input in [
+    b"xn--bcher-kva.example".as_slice(),
+    b"xn--e1afmkfd.xn--80akhbyknj4f",
+    b"xn--53h.com",
+  ] {
+    assert!(Domain::<std::string::String>::try_from(input).is_ok());
+    assert!(verify_domain(input).is_ok());
+  }
+
+  for input in [b"xn--0.pt".as_slice(), b"xn--a.pt", b"xn--u-ccb.ru"] {
+    assert!(Domain::<std::string::String>::try_from(input).is_err());
+    assert!(verify_domain(input).is_err());
+    assert!(verify_ascii_domain_allow_percent_encoding(input).is_err());
+  }
+}
+
 /// Regression test: verify_ascii_domain must enforce the 253-byte max length
 /// (254 with trailing dot for FQDN). Previously, domains > 254 bytes were accepted.
 #[test]
@@ -253,6 +285,33 @@ fn domain_owned_conversions_cover_storage_variants() {
   assert!(verify_ascii_domain_allow_percent_encoding(b"example%2Ecom").is_ok());
   assert!(verify_ascii_domain_allow_percent_encoding("测试.中国".as_bytes()).is_err());
   assert!(verify_ascii_domain_allow_percent_encoding("测试%2E中国".as_bytes()).is_err());
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+#[test]
+fn percent_decoding_can_exceed_buffer_capacity_before_idna() {
+  fn percent_encode(input: &[u8]) -> std::string::String {
+    use std::fmt::Write;
+
+    let mut output = std::string::String::new();
+    for byte in input {
+      write!(output, "%{byte:02X}").unwrap();
+    }
+    output
+  }
+
+  // UTS46 maps fullwidth ASCII letters to ASCII. The source is larger than
+  // Buffer's 254-byte capacity, while the normalized domain is well below it.
+  let label = "ａ".repeat(63);
+  let unicode = std::format!("{label}.{label}.{label}");
+  assert!(unicode.len() > 254);
+  let percent = percent_encode(unicode.as_bytes());
+
+  let direct: Domain<std::string::String> = Domain::try_from(unicode.as_str()).unwrap();
+  let encoded: Domain<std::string::String> = Domain::try_from(percent.as_str()).unwrap();
+  assert_eq!(direct, encoded);
+  assert_eq!(direct.as_inner().len(), 191);
+  assert!(verify_domain(percent.as_bytes()).is_ok());
 }
 
 #[cfg(feature = "serde")]

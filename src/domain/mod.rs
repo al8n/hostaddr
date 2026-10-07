@@ -57,8 +57,8 @@ impl ParseAsciiDomainError {
 }
 
 /// A DNS domain name, as `.` dot-separated labels.
-/// Non-ASCII labels are encoded in punycode per IDNA if this is the host of a special URL,
-/// or percent encoded for non-special URLs.
+/// Non-ASCII labels are converted to ASCII using UTS46/IDNA. Allocating parsing
+/// entry points also decode percent-encoded input before applying that policy.
 ///
 /// Equality, ordering, and hashing compare the stored representation. They are
 /// therefore case-sensitive; normalize names explicitly for DNS-insensitive
@@ -846,31 +846,24 @@ const _: () = {
       let domain = input.as_ref();
       // We have percent encoded bytes, so we need to decode them.
       if Memchr::new(b'%', domain).next().is_some() {
-        let input = percent_encoding::percent_decode(domain);
-        let mut domain_buf = Buffer::new();
-        for byte in input {
-          domain_buf.push(byte).map_err(|_| ParseDomainError(()))?;
-        }
-
-        let input = domain_buf.as_bytes();
+        let input: Vec<u8> = percent_encoding::percent_decode(domain).collect();
         if input.is_ascii() {
-          return verify_ascii_domain(input)
-            .map(|_| either::Either::Right(domain_buf))
-            .map_err(|_| ParseDomainError(()));
+          verify_ascii_domain_alloc(&input)?;
+          return Ok(either::Either::Right(Buffer::copy_from_slice(&input)));
         }
 
         let mut sinker = Buffer::new();
-        let buf = match domain_to_ascii(input, BufferWriter(&mut sinker))? {
-          either::Either::Left(_) => domain_buf,
+        let buf = match domain_to_ascii(&input, BufferWriter(&mut sinker))? {
+          either::Either::Left(_) => return Err(ParseDomainError(())),
           either::Either::Right(_) => sinker,
         };
 
-        verify_ascii_domain(buf.as_bytes()).map_err(|_| ParseDomainError(()))?;
+        verify_ascii_domain_alloc(buf.as_bytes())?;
         return Ok(either::Either::Right(buf));
       }
 
       if domain.is_ascii() {
-        return verify_ascii_domain(domain)
+        return verify_ascii_domain_alloc(domain)
           .map(|_| either::Either::Left(Self(input)))
           .map_err(|_| ParseDomainError(()));
       }
@@ -879,11 +872,11 @@ const _: () = {
       Ok(match domain_to_ascii(domain, BufferWriter(&mut sinker))? {
         either::Either::Left(_) => {
           let domain = from_utf8(domain).map_err(|_| ParseDomainError(()))?;
-          verify_ascii_domain(domain.as_bytes()).map_err(|_| ParseDomainError(()))?;
+          verify_ascii_domain_alloc(domain.as_bytes())?;
           either::Either::Left(Self(input))
         }
         either::Either::Right(_) => {
-          verify_ascii_domain(sinker.as_bytes()).map_err(|_| ParseDomainError(()))?;
+          verify_ascii_domain_alloc(sinker.as_bytes())?;
           either::Either::Right(sinker)
         }
       })
@@ -1036,6 +1029,36 @@ const _: () = {
   }
 };
 
+#[cfg(any(feature = "alloc", feature = "std"))]
+fn verify_ascii_domain_alloc(input: &[u8]) -> Result<(), ParseDomainError> {
+  verify_ascii_domain(input).map_err(|_| ParseDomainError(()))?;
+
+  // The structural validator intentionally accepts ACE-looking labels. For
+  // allocating/domain-aware entry points, run those labels through UTS46 so
+  // malformed A-label payloads (for example `xn--0`) are rejected as well.
+  let has_alabel = input.split(|byte| *byte == b'.').any(|label| {
+    label
+      .get(..4)
+      .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"xn--"))
+  });
+  if !has_alabel {
+    return Ok(());
+  }
+
+  use idna::uts46::{DnsLength, Hyphens, Uts46};
+  use idna::AsciiDenyList;
+
+  Uts46::new()
+    .to_ascii(
+      input,
+      AsciiDenyList::URL,
+      Hyphens::CheckFirstLast,
+      DnsLength::Ignore,
+    )
+    .map(|_| ())
+    .map_err(|_| ParseDomainError(()))
+}
+
 #[cfg(all(feature = "smol_str_0_3", any(feature = "std", feature = "alloc")))]
 const _: () = {
   use smol_str_0_3::SmolStr;
@@ -1164,6 +1187,8 @@ const _: () = {
 #[cfg(any(feature = "alloc", feature = "std"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "std"))))]
 pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
+  use std::vec::Vec;
+
   use idna::{
     uts46::{ErrorPolicy, Hyphens, Uts46},
     AsciiDenyList,
@@ -1190,29 +1215,23 @@ pub fn verify_domain(input: &[u8]) -> Result<(), ParseDomainError> {
   let domain = input;
   // We have percent encoded bytes, so we need to decode them.
   if Memchr::new(b'%', domain).next().is_some() {
-    let input = percent_encoding::percent_decode(domain);
-    let mut domain_buf = Buffer::new();
-    for byte in input {
-      domain_buf.push(byte).map_err(|_| ParseDomainError(()))?;
-    }
-
-    let input = domain_buf.as_bytes();
+    let input: Vec<u8> = percent_encoding::percent_decode(domain).collect();
     if input.is_ascii() {
-      return verify_ascii_domain(input).map_err(|_| ParseDomainError(()));
+      return verify_ascii_domain_alloc(&input);
     }
 
     let mut output = Buffer::new();
-    domain_to_ascii(input, &mut output)?;
-    return verify_ascii_domain(output.as_bytes()).map_err(|_| ParseDomainError(()));
+    domain_to_ascii(&input, &mut output)?;
+    return verify_ascii_domain_alloc(output.as_bytes());
   }
 
   if domain.is_ascii() {
-    return verify_ascii_domain(domain).map_err(|_| ParseDomainError(()));
+    return verify_ascii_domain_alloc(domain);
   }
 
   let mut output = Buffer::new();
   domain_to_ascii(domain, &mut output)?;
-  verify_ascii_domain(output.as_bytes()).map_err(|_| ParseDomainError(()))
+  verify_ascii_domain_alloc(output.as_bytes())
 }
 
 /// Verifies that the input is a valid ASCII domain name. The input
@@ -1265,24 +1284,47 @@ pub fn verify_ascii_domain_allow_percent_encoding(
 ) -> Result<(), ParseAsciiDomainError> {
   // We have percent encoded bytes, so we need to decode them.
   if Memchr::new(b'%', domain).next().is_some() {
-    let input = percent_encoding::percent_decode(domain);
-    let mut domain_buf = Buffer::new();
-    for byte in input {
-      domain_buf
-        .push(byte)
-        .map_err(|_| ParseAsciiDomainError(()))?;
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    {
+      use std::vec::Vec;
+
+      let input: Vec<u8> = percent_encoding::percent_decode(domain).collect();
+      if input.is_ascii() {
+        return verify_ascii_domain_alloc(&input).map_err(|_| ParseAsciiDomainError(()));
+      }
+
+      return Err(ParseAsciiDomainError(()));
     }
 
-    let input = domain_buf.as_bytes();
-    if input.is_ascii() {
-      return verify_ascii_domain(input).map_err(|_| ParseAsciiDomainError(()));
-    }
+    #[cfg(not(any(feature = "alloc", feature = "std")))]
+    {
+      let input = percent_encoding::percent_decode(domain);
+      let mut domain_buf = Buffer::new();
+      for byte in input {
+        domain_buf
+          .push(byte)
+          .map_err(|_| ParseAsciiDomainError(()))?;
+      }
 
-    return Err(ParseAsciiDomainError(()));
+      let input = domain_buf.as_bytes();
+      if input.is_ascii() {
+        return verify_ascii_domain(input).map_err(|_| ParseAsciiDomainError(()));
+      }
+
+      return Err(ParseAsciiDomainError(()));
+    }
   }
 
   if domain.is_ascii() {
-    return verify_ascii_domain(domain).map_err(|_| ParseAsciiDomainError(()));
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    {
+      return verify_ascii_domain_alloc(domain).map_err(|_| ParseAsciiDomainError(()));
+    }
+
+    #[cfg(not(any(feature = "alloc", feature = "std")))]
+    {
+      return verify_ascii_domain(domain);
+    }
   }
 
   Err(ParseAsciiDomainError(()))

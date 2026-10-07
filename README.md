@@ -36,23 +36,29 @@ them as identity keys when that is the desired policy.
 
 ## Release status
 
-The latest published release is `0.3.0`. `1.0.0` has not been published yet; the
-roadmap below describes the remaining release contract.
+The latest published pre-release is `1.0.0-rc.1` (2026-10-07). The current
+branch targets `1.0.0-rc.2`; the release candidate is intended for downstream
+validation before the final `1.0.0` contract is frozen.
 
-The planned `1.0.0` release will:
+The `1.0.0` release will:
 
 - freeze the validated host/address and IPC taxonomy APIs;
 - require Rust `1.89` or newer;
 - keep `no_std`/`no-alloc` and `alloc` feature combinations buildable; and
-- document the Serde representation and compatibility policy.
+- document the Serde representation and compatibility policy;
+- validate ASCII `xn--` A-labels through UTS46 on allocating entry points; and
+- preserve the stack-only structural behavior of `try_from_ascii_*` and
+  `verify_ascii_domain`.
 
-Until `1.0.0` is released, downstream users should depend on the published
-`0.3` line and treat the `1.0` work as pre-release.
+Until `1.0.0` is released, downstream users should treat the `1.0` line as
+pre-release and report compatibility findings against `1.0.0-rc.2`.
 
 ## Features
 
 - **`no_std` and `no-alloc` compatible**: Use the `Buffer` type for stack-allocated domains without any heap allocation
-- **Generic storage**: Works with `String`, `Arc<str>`, `Box<str>`, `Vec<u8>`, `SmolStr`, `Bytes`, and more
+- **Generic storage**: Supports the storage types implemented by each address
+  family, including `String`, `Arc<str>`, `Box<str>`, `Vec<u8>`, `SmolStr`,
+  `Bytes`, and `Buffer`
 - **IDNA/Punycode support**: Automatic conversion of international domain names (e.g. `测试.中国` to punycode)
 - **Type-safe validation**: Domain names follow this crate's ASCII and UTS46/IDNA validation policy
 - **Percent-encoding**: Transparent decoding of percent-encoded domains
@@ -69,6 +75,9 @@ Until `1.0.0` is released, downstream users should depend on the published
 hostaddr = "0.3"
 ```
 
+To test the published release candidate, opt in explicitly with
+`hostaddr = "1.0.0-rc.1"`; the `rc.2` target is not published yet.
+
 ### Feature Flags
 
 | Feature | Description |
@@ -78,6 +87,7 @@ hostaddr = "0.3"
 | **`alloc`** | Allocation support without `std` |
 | **`serde`** | Serialize/deserialize support |
 | **`arbitrary`** | Fuzzing with `arbitrary` crate |
+| **`quickcheck`** | Property-based generators for host builds; also compile-checked for wasm with the `wasm_js` backend |
 | **`cheap-clone`** | `CheapClone` trait for smart pointer types |
 | **`smol_str`** | `SmolStr` storage support |
 | **`bytes`** | `Bytes` storage support |
@@ -144,10 +154,12 @@ discard `flowinfo` and `scope_id`, because `HostAddr` stores only an IP address
 and optional port. Keep the original `SocketAddrV6` when those fields matter.
 
 The parsing and `TryFrom` entry points, plus `From<Domain<_>>`, validate domain
-invariants. The public `Host::Domain(S)` variant and
-`HostAddr::new`/`set_host`/`with_host` also accept caller-provided storage
-directly; callers using those escape hatches are responsible for preserving
-the domain invariant.
+invariants. The allocating domain parsers validate ASCII `xn--` A-labels with
+UTS46; the `try_from_ascii_*` and `verify_ascii_domain` APIs are deliberately
+structural and do not decode ACE payloads. Address constructors that accept
+caller-provided storage are documented with their own invariant requirements;
+storage support is limited to the types and trait combinations implemented by
+each address family.
 
 ### Serde compatibility
 
@@ -210,6 +222,13 @@ assert!(domain.is_fqdn());
 let domain = Domain::try_from_ascii_str("example.com").unwrap();
 }
 ```
+
+`Domain` parsing is independent of URL-specialness: allocating
+`try_from`/`verify_domain` entry points decode percent-encoded octets and then
+apply the same UTS46/ASCII policy, while `try_from_ascii_*` and
+`verify_ascii_domain` accept only plain ASCII input. A `ParseDomainError`
+therefore means the supplied domain representation is invalid; it is not a
+URL-parser error and does not perform URL authority parsing.
 
 ### Choosing a Storage Type
 

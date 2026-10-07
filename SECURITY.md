@@ -2,9 +2,10 @@
 
 ## Supported versions
 
-The latest published `0.3.x` release is the supported line for security fixes.
-The `1.0.0` work in this repository is not published yet and should not be
-treated as a stable release.
+The latest stable release is the published `0.3.x` line. The published
+`1.0.0-rc.1` and current `1.0.0-rc.2` work are pre-release candidates and
+should not be treated as stable; security reports are nevertheless welcome for
+both lines so fixes can be carried into the final `1.0.0` release.
 
 ## Reporting a vulnerability
 

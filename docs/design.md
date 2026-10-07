@@ -1,12 +1,14 @@
 # Address Abstraction Design (v2)
 
-> Status: the core taxonomy below is implemented in the current `0.3.x` line.
-> The `1.0.0` release is not published yet; this document records the API and
-> wire-format contract being stabilized for that release.
+> Status: the core taxonomy below is implemented in the `0.3.x` line and is
+> being stabilized for `1.0.0`. `1.0.0-rc.1` was published on 2026-10-07;
+> `1.0.0-rc.2` is the current validation target.
 
 ## Goals
 
-This design extends `hostaddr` from Internet host addresses to a complete, type-safe address abstraction for Rust.
+This design extends `hostaddr` from Internet host addresses to a focused,
+type-safe address abstraction for the host and IPC families modeled by this
+crate.
 
 Design goals:
 
@@ -28,7 +30,8 @@ pub enum Addr<H, P, A> {
 }
 ```
 
-`Addr` represents every address accepted by a runtime.
+`Addr` represents the host and IPC address families accepted by this crate. It
+is not a claim that every runtime-specific endpoint or protocol is modeled.
 
 Examples:
 
@@ -52,6 +55,12 @@ fields present in `SocketAddrV6`.
 `Domain`, `Host`, and `HostAddr` retain representation-sensitive, case-sensitive
 `Eq`, `Ord`, and `Hash` semantics. DNS-insensitive identity keys must normalize
 their input at the call site.
+
+Allocating domain parsers and `verify_domain` decode percent-encoded input,
+normalize Unicode through UTS46, and validate ASCII `xn--` A-labels with the
+same UTS46 implementation. The structural `try_from_ascii_*` and
+`verify_ascii_domain` entry points intentionally perform only ASCII label and
+length checks, so they remain available in no-alloc builds without IDNA data.
 
 ```text
 Domain
@@ -103,7 +112,8 @@ Unlike previous proposals, it intentionally does **not** contain `SocketAddr` or
 pub struct UnixAddr<P: ?Sized>(P);
 ```
 
-Storage type for the optional filesystem view:
+Storage type for the optional filesystem view (when the selected platform
+provides that view):
 
 ```rust
 P: AsRef<Path> (when the `std` feature is enabled)
@@ -295,9 +305,10 @@ LocalAddr<P, A>
 
 # Generic Storage Philosophy
 
-Every address owns only its semantic validation.
+Every address owns only the semantic validation implemented for its family.
 
-Storage is entirely user selectable.
+Storage is user selectable within the supported trait and feature combinations
+for each address family.
 
 Examples:
 
@@ -323,7 +334,9 @@ Addr<
 >
 ```
 
-The address types never dictate allocation strategy.
+The address types never dictate allocation strategy, but a custom storage type
+must satisfy the traits required by the specific family and feature set; this
+is not an assertion that every custom storage works for every address family.
 
 ---
 
@@ -366,9 +379,31 @@ tags:
 
 The corresponding human-readable names are `unix`, `abstract`, `named_pipe`,
 `vsock`, `host`, `ipc`, and `loopback`. These names and tags are part of the
-planned `1.0.0` compatibility contract. Deserialization must continue to
-validate domain and semantic-address invariants rather than constructing
-unchecked values.
+`1.0.0-rc.1` through `1.0.x` compatibility contract. Deserialization must
+continue to validate domain and semantic-address invariants rather than
+constructing unchecked values.
+
+The contract applies across supported platforms and both human-readable and
+binary Serde formats. A variant that is not compiled for the target platform
+is rejected during deserialization; its numeric tag is never reinterpreted as
+another variant. New variants use new tags and names, and existing tags are
+never reused. `Domain` and `Buffer` keep their existing data-model boundary:
+human-readable formats carry validated text, while binary formats carry the
+validated byte representation. This compatibility promise covers the
+`1.0.0-rc.1`/`rc.2` migration and subsequent `1.0.x` releases; it does not
+promise compatibility with malformed values produced by pre-1.0 unchecked
+constructors.
+
+## 0.3.x to 1.0 migration
+
+The host/address taxonomy introduced in `0.3.x` remains the source-level
+shape for `1.0`: `Addr` continues to distinguish `Host` and `Ipc`, and
+`LocalAddr` continues to distinguish loopback from IPC. The 1.0 migration
+closes the validation gap around caller-supplied host storage. Code that
+constructed a domain-like `Host::Domain` value directly must now provide a
+validated `Domain` through the parsing or conversion APIs. This is a source
+compatibility change made to preserve the type invariant; the serialized host
+variant and its wire tags remain unchanged.
 
 ---
 
