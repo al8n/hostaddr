@@ -95,6 +95,9 @@ To test the published release candidate, opt in explicitly with
 | **`tinyvec`** | `TinyVec` storage support |
 | **`smallvec`** | `SmallVec` storage support |
 
+Only the features listed in this table are public. The old implicit `idna`
+feature was removed; enable `alloc` or `std` to use the crate's IDNA support.
+
 ## Quick Start
 
 ```rust

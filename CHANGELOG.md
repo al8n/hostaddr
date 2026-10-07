@@ -78,6 +78,8 @@
 - Validate `Deserialize` inputs instead of allowing unchecked domain/host values.
 - Parse bare IPv6 addresses before host/port splitting and standardize IDNA and
   percent-decoding validation.
+- Remove the invalid implicit Cargo feature `idna`; downstream crates that
+  explicitly enabled it must use `alloc` or `std`, which provide IDNA support.
 - Mark extensible parsing/address enums `non_exhaustive`.
 - Raise the MSRV to Rust `1.89`.
 
@@ -89,7 +91,10 @@ from IPC. Direct construction of a domain-like `Host::Domain` value is no
 longer an unchecked way to bypass the `Domain` invariant; use a parsing or
 conversion API to obtain the validated domain storage instead. This source
 change does not alter the serialized host variant or the stable IPC/address
-tags listed in the design document.
+tags listed in the design document. The implicit `idna` feature is also
+removed: downstream manifests that enabled it explicitly should select
+`alloc` or `std` instead, because those are the public features that provide
+IDNA support.
 
 # RELEASED
 
