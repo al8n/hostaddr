@@ -20,7 +20,16 @@ fn buffer_deserializes_transient_strings_from_reader() {
 }
 
 #[test]
-fn buffer_deserializes_owned_legacy_string_visitors() {
+fn buffer_deserializes_owned_ascii_string_visitors() {
+  let deserializer =
+    serde::de::value::StringDeserializer::<serde::de::value::Error>::new("example.com".to_owned());
+  let buffer = Buffer::deserialize(deserializer).unwrap();
+  assert_eq!(buffer.as_str(), "example.com");
+}
+
+#[cfg(any(feature = "alloc", feature = "std"))]
+#[test]
+fn buffer_deserializes_owned_unicode_string_visitors_with_idna() {
   let deserializer =
     serde::de::value::StringDeserializer::<serde::de::value::Error>::new("测试.中国".to_owned());
   let buffer = Buffer::deserialize(deserializer).unwrap();
