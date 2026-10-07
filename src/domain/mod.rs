@@ -1290,7 +1290,7 @@ pub fn verify_ascii_domain_allow_percent_encoding(
 
       let input: Vec<u8> = percent_encoding::percent_decode(domain).collect();
       if input.is_ascii() {
-        return verify_ascii_domain_alloc(&input).map_err(|_| ParseAsciiDomainError(()));
+        return verify_ascii_domain(&input);
       }
 
       return Err(ParseAsciiDomainError(()));
@@ -1316,15 +1316,7 @@ pub fn verify_ascii_domain_allow_percent_encoding(
   }
 
   if domain.is_ascii() {
-    #[cfg(any(feature = "alloc", feature = "std"))]
-    {
-      return verify_ascii_domain_alloc(domain).map_err(|_| ParseAsciiDomainError(()));
-    }
-
-    #[cfg(not(any(feature = "alloc", feature = "std")))]
-    {
-      return verify_ascii_domain(domain);
-    }
+    return verify_ascii_domain(domain);
   }
 
   Err(ParseAsciiDomainError(()))

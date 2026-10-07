@@ -155,11 +155,12 @@ and optional port. Keep the original `SocketAddrV6` when those fields matter.
 
 The parsing and `TryFrom` entry points, plus `From<Domain<_>>`, validate domain
 invariants. The allocating domain parsers validate ASCII `xn--` A-labels with
-UTS46; the `try_from_ascii_*` and `verify_ascii_domain` APIs are deliberately
-structural and do not decode ACE payloads. Address constructors that accept
-caller-provided storage are documented with their own invariant requirements;
-storage support is limited to the types and trait combinations implemented by
-each address family.
+UTS46; the `try_from_ascii_*`, `verify_ascii_domain`, and
+`verify_ascii_domain_allow_percent_encoding` APIs are deliberately structural
+and do not decode ACE payloads. Address constructors that accept caller-provided
+storage are documented with their own invariant requirements; storage support
+is limited to the types and trait combinations implemented by each address
+family.
 
 ### Serde compatibility
 
@@ -176,6 +177,21 @@ Binary formats use two-element tuples and stable numeric tags:
 These tags and variant names are part of the `1.0.0` wire-format contract. New
 variants must not reuse an existing tag; deserialization also re-checks the
 validated domain and semantic-address invariants.
+
+Semantic IP and socket wrappers use the following data model and Serde
+contract:
+
+| Model | Validated data | Human-readable writer | Human-readable reader | Binary representation |
+|------|-----------------|------------------------|------------------------|-----------------------|
+| `*IpAddr` | `IpAddr` | IP string | IP string | existing `IpAddr` representation |
+| `*Addr` V4 | `SocketAddrV4` | `{"v4":{"ip":"...","port":...}}` | rc2 object or rc1 string | tag `0`: `V4(ip, port)` |
+| `*Addr` V6 | `SocketAddrV6` | `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | rc2 object or rc1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
+
+RC2 reads the RC1 socket strings (and legacy binary tags). RC1 cannot read the
+RC2 human-readable objects or binary tag `2`. RC1 strings and legacy binary
+tag `1` do not carry IPv6 `flowinfo` or `scope_id`, so those fields are zero
+when RC2 reads them; metadata already lost by an RC1 writer cannot be
+reconstructed.
 
 ```rust
 use hostaddr::{Addr, HostAddr, LocalAddr, LoopbackAddr, PrivateIpAddr};
@@ -225,8 +241,9 @@ let domain = Domain::try_from_ascii_str("example.com").unwrap();
 
 `Domain` parsing is independent of URL-specialness: allocating
 `try_from`/`verify_domain` entry points decode percent-encoded octets and then
-apply the same UTS46/ASCII policy, while `try_from_ascii_*` and
-`verify_ascii_domain` accept only plain ASCII input. A `ParseDomainError`
+apply the same UTS46/ASCII policy, while `try_from_ascii_*`,
+`verify_ascii_domain`, and `verify_ascii_domain_allow_percent_encoding` accept
+only structural ASCII input. A `ParseDomainError`
 therefore means the supplied domain representation is invalid; it is not a
 URL-parser error and does not perform URL authority parsing.
 

@@ -59,8 +59,10 @@ their input at the call site.
 Allocating domain parsers and `verify_domain` decode percent-encoded input,
 normalize Unicode through UTS46, and validate ASCII `xn--` A-labels with the
 same UTS46 implementation. The structural `try_from_ascii_*` and
-`verify_ascii_domain` entry points intentionally perform only ASCII label and
-length checks, so they remain available in no-alloc builds without IDNA data.
+`verify_ascii_domain` and `verify_ascii_domain_allow_percent_encoding` entry
+points intentionally perform only ASCII label and length checks (after any
+percent decoding), so they remain available in no-alloc builds without IDNA
+data.
 
 ```text
 Domain
@@ -393,6 +395,19 @@ validated byte representation. This compatibility promise covers the
 `1.0.0-rc.1`/`rc.2` migration and subsequent `1.0.x` releases; it does not
 promise compatibility with malformed values produced by pre-1.0 unchecked
 constructors.
+
+Semantic IP and socket wrappers are part of the same compatibility contract:
+
+| Model | Validated data | Human-readable writer | Human-readable reader | Binary representation |
+| --- | --- | --- | --- | --- |
+| `*IpAddr` | `IpAddr` | IP string | IP string | existing `IpAddr` representation |
+| `*Addr` V4 | `SocketAddrV4` | `{"v4":{"ip":"...","port":...}}` | RC2 object or RC1 string | tag `0`: `V4(ip, port)` |
+| `*Addr` V6 | `SocketAddrV6` | `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | RC2 object or RC1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
+
+RC2 reads RC1 socket strings and legacy binary tags. RC1 cannot read RC2
+objects or binary tag `2`. RC1 strings and legacy binary tag `1` omit IPv6
+`flowinfo` and `scope_id`, so RC2 reads them as zero; metadata already lost by
+an RC1 writer cannot be reconstructed.
 
 ## 0.3.x to 1.0 migration
 

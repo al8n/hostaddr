@@ -7,7 +7,7 @@
 ### Domain and Serde correctness
 
 - Validate ASCII `xn--` A-labels through UTS46 on allocating domain parsers and
-  verification functions, while keeping the no-alloc ASCII entry points
+  `verify_domain`, while keeping all `verify_ascii_domain*` entry points
   structural-only.
 - Decode percent-encoded input into an allocating intermediate before applying
   the final ASCII domain limit, so long Unicode input and its fully encoded
@@ -24,6 +24,22 @@
 - Define the cross-platform IPC and Serde compatibility range as
   `1.0.0-rc.1` through `1.0.x`: unavailable platform variants reject their
   tags, and tags are never reused.
+
+### Source and wire migration
+
+- Change the `Host::Domain` payload from raw `S` to validated `Domain<S>`;
+  this is an intentional source break for code constructing the variant.
+- Change `Host::unwrap_domain_mut` to return `&mut Domain<S>`, so mutable access
+  cannot bypass domain validation.
+- Remove the `HostAddr<S> -> HostAddr<Domain<S>>` laundering conversions (and
+  their borrowed counterparts) that could re-wrap unchecked storage as a
+  validated domain.
+- Repair semantic socket Serde to preserve IPv6 `flowinfo` and `scope_id`:
+  human-readable writers emit V4/V6 objects, while readers accept RC1 strings;
+  binary tags are `0 = V4`, `1 = legacy V6`, and `2 = V6Extended`.
+- Make the compatibility direction explicit: RC2 reads RC1 strings and legacy
+  tags, but RC1 cannot read RC2 objects or tag `2`; metadata omitted by RC1 is
+  not recoverable.
 
 ## 1.0.0-rc.1 (2026-10-07)
 

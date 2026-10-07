@@ -27,6 +27,23 @@ fn ascii_structural_paths_do_not_decode_ace_payloads() {
   }
 }
 
+#[test]
+fn ascii_percent_entry_point_remains_structural() {
+  let raw = b"xn--0.pt";
+  let percent_encoded = b"%78%6e%2d%2d%30%2e%70%74";
+
+  assert!(verify_ascii_domain_allow_percent_encoding(raw).is_ok());
+  assert!(verify_ascii_domain_allow_percent_encoding(percent_encoded).is_ok());
+
+  #[cfg(any(feature = "std", feature = "alloc"))]
+  {
+    assert!(Domain::<std::string::String>::try_from(raw.as_slice()).is_err());
+    assert!(Domain::<std::string::String>::try_from(percent_encoded.as_slice()).is_err());
+    assert!(verify_domain(raw).is_err());
+    assert!(verify_domain(percent_encoded).is_err());
+  }
+}
+
 #[cfg(any(feature = "std", feature = "alloc"))]
 #[test]
 fn alloc_paths_validate_ascii_alabels_with_idna() {
@@ -44,7 +61,7 @@ fn alloc_paths_validate_ascii_alabels_with_idna() {
   for input in [b"xn--0.pt".as_slice(), b"xn--a.pt", b"xn--u-ccb.ru"] {
     assert!(Domain::<std::string::String>::try_from(input).is_err());
     assert!(verify_domain(input).is_err());
-    assert!(verify_ascii_domain_allow_percent_encoding(input).is_err());
+    assert!(verify_ascii_domain_allow_percent_encoding(input).is_ok());
   }
 }
 
