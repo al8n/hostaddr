@@ -1,4 +1,4 @@
-#![cfg(feature = "serde")]
+#![cfg(all(feature = "serde", any(feature = "alloc", feature = "std")))]
 
 use core::{
   fmt::Debug,
