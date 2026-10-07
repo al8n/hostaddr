@@ -1,15 +1,15 @@
-#![cfg(all(feature = "serde", any(feature = "alloc", feature = "std")))]
+#![cfg(feature = "serde")]
 
 use core::{
   fmt::Debug,
   net::{IpAddr, SocketAddr, SocketAddrV6},
 };
 
-use hostaddr::{
-  Addr, Buffer, Domain, Host, HostAddr, LinkLocalAddr, LocalAddr, LoopbackAddr, LoopbackIpAddr,
-};
+#[cfg(any(feature = "alloc", feature = "std"))]
+use hostaddr::{Addr, Buffer, Domain, Host, HostAddr, LocalAddr};
 #[cfg(unix)]
 use hostaddr::{IpcAddr, UnixAddr};
+use hostaddr::{LinkLocalAddr, LoopbackAddr, LoopbackIpAddr};
 use serde::{de::DeserializeOwned, Serialize};
 
 fn assert_wire<T>(value: &T, json: &str, bincode: &[u8])
@@ -22,6 +22,7 @@ where
   assert_eq!(bincode::deserialize::<T>(bincode).unwrap(), *value);
 }
 
+#[cfg(any(feature = "alloc", feature = "std"))]
 #[test]
 fn rc1_domain_host_and_hostaddr_wire_is_frozen() {
   const DOMAIN: &[u8] = &[
@@ -132,6 +133,7 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
   }
 }
 
+#[cfg(any(feature = "alloc", feature = "std"))]
 #[test]
 fn aggregate_address_wire_is_literal_and_accepts_rc1_semantic_json() {
   const ADDR: &[u8] = &[
