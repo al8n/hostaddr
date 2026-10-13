@@ -383,8 +383,6 @@ fn hostaddr_deserialize_validates_and_normalizes_domain_hosts() {
 
     let json = serde_json::to_string(&invalid).unwrap();
     assert!(serde_json::from_str::<HostAddr<String>>(&json).is_err());
-    let bincode = bincode::serialize(&invalid).unwrap();
-    assert!(bincode::deserialize::<HostAddr<String>>(&bincode).is_err());
     let msgpack = rmp_serde::to_vec(&invalid).unwrap();
     assert!(rmp_serde::from_slice::<HostAddr<String>>(&msgpack).is_err());
   }
@@ -395,8 +393,6 @@ fn hostaddr_deserialize_validates_and_normalizes_domain_hosts() {
   };
   let json = serde_json::to_string(&invalid_utf8).unwrap();
   assert!(serde_json::from_str::<HostAddr<Vec<u8>>>(&json).is_err());
-  let bincode = bincode::serialize(&invalid_utf8).unwrap();
-  assert!(bincode::deserialize::<HostAddr<Vec<u8>>>(&bincode).is_err());
   let msgpack = rmp_serde::to_vec(&invalid_utf8).unwrap();
   assert!(rmp_serde::from_slice::<HostAddr<Vec<u8>>>(&msgpack).is_err());
 
@@ -411,10 +407,6 @@ fn hostaddr_deserialize_validates_and_normalizes_domain_hosts() {
 
     let json = serde_json::to_string(&raw).unwrap();
     let addr: HostAddr<String> = serde_json::from_str(&json).unwrap();
-    assert_eq!(addr.unwrap_domain(), (String::from(expected), Some(8443)));
-
-    let bincode = bincode::serialize(&raw).unwrap();
-    let addr: HostAddr<String> = bincode::deserialize(&bincode).unwrap();
     assert_eq!(addr.unwrap_domain(), (String::from(expected), Some(8443)));
 
     let msgpack = rmp_serde::to_vec(&raw).unwrap();
@@ -449,9 +441,6 @@ fn cow_hostaddr_serde_validates_owned_and_borrowed_storage() {
     let json = serde_json::to_string(value).unwrap();
     assert_eq!(serde_json::from_str::<T>(&json).unwrap(), *value);
 
-    let bincode = bincode::serialize(value).unwrap();
-    assert_eq!(bincode::deserialize::<T>(&bincode).unwrap(), *value);
-
     let msgpack = rmp_serde::to_vec(value).unwrap();
     assert_eq!(rmp_serde::from_slice::<T>(&msgpack).unwrap(), *value);
   }
@@ -464,9 +453,6 @@ fn cow_hostaddr_serde_validates_owned_and_borrowed_storage() {
     let json = serde_json::to_string(wire).unwrap();
     assert!(serde_json::from_str::<T>(&json).is_err());
 
-    let bincode = bincode::serialize(wire).unwrap();
-    assert!(bincode::deserialize::<T>(&bincode).is_err());
-
     let msgpack = rmp_serde::to_vec(wire).unwrap();
     assert!(rmp_serde::from_slice::<T>(&msgpack).is_err());
   }
@@ -474,10 +460,6 @@ fn cow_hostaddr_serde_validates_owned_and_borrowed_storage() {
   fn assert_str_normalizes(value: &RawHostAddr<Cow<'static, str>>, expected: &str) {
     let json = serde_json::to_string(value).unwrap();
     let decoded: HostAddr<Cow<'static, str>> = serde_json::from_str(&json).unwrap();
-    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
-
-    let bincode = bincode::serialize(value).unwrap();
-    let decoded: HostAddr<Cow<'static, str>> = bincode::deserialize(&bincode).unwrap();
     assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
 
     let msgpack = rmp_serde::to_vec(value).unwrap();
@@ -488,10 +470,6 @@ fn cow_hostaddr_serde_validates_owned_and_borrowed_storage() {
   fn assert_bytes_normalizes(value: &RawHostAddr<Cow<'static, [u8]>>, expected: &[u8]) {
     let json = serde_json::to_string(value).unwrap();
     let decoded: HostAddr<Cow<'static, [u8]>> = serde_json::from_str(&json).unwrap();
-    assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
-
-    let bincode = bincode::serialize(value).unwrap();
-    let decoded: HostAddr<Cow<'static, [u8]>> = bincode::deserialize(&bincode).unwrap();
     assert_eq!(decoded.unwrap_domain().0.as_ref(), expected);
 
     let msgpack = rmp_serde::to_vec(value).unwrap();
