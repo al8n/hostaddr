@@ -15,9 +15,9 @@ use serde::{
   ser::{Error as SerdeError, Impossible, SerializeTupleVariant, Serializer},
   Serialize,
 };
-use serde_test2::{
-  assert_de_tokens_error, assert_ser_tokens, assert_tokens, Compact, Configure, Token,
-};
+#[cfg(any(feature = "alloc", feature = "std"))]
+use serde_test2::assert_ser_tokens;
+use serde_test2::{assert_de_tokens_error, assert_tokens, Compact, Configure, Token};
 
 #[derive(Debug)]
 struct VariantIndexError;
