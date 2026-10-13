@@ -10,10 +10,165 @@ use hostaddr::{Addr, Buffer, Domain, Host, HostAddr, LocalAddr};
 #[cfg(unix)]
 use hostaddr::{IpcAddr, UnixAddr};
 use hostaddr::{LinkLocalAddr, LoopbackAddr, LoopbackIpAddr};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{
+  de::DeserializeOwned,
+  ser::{Error as SerdeError, Impossible, SerializeTupleVariant, Serializer},
+  Serialize,
+};
 use serde_test2::{
   assert_de_tokens_error, assert_ser_tokens, assert_tokens, Compact, Configure, Token,
 };
+
+#[derive(Debug)]
+struct VariantIndexError;
+
+impl core::fmt::Display for VariantIndexError {
+  fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    formatter.write_str("unsupported serializer shape")
+  }
+}
+
+impl std::error::Error for VariantIndexError {}
+
+impl SerdeError for VariantIndexError {
+  fn custom<T>(_: T) -> Self
+  where
+    T: core::fmt::Display,
+  {
+    Self
+  }
+}
+
+struct VariantIndexSerializer<'a> {
+  index: &'a mut Option<u32>,
+}
+
+struct VariantIndexTupleVariant;
+
+impl SerializeTupleVariant for VariantIndexTupleVariant {
+  type Ok = ();
+  type Error = VariantIndexError;
+
+  fn serialize_field<T>(&mut self, _: &T) -> Result<(), Self::Error>
+  where
+    T: ?Sized + Serialize,
+  {
+    Ok(())
+  }
+
+  fn end(self) -> Result<Self::Ok, Self::Error> {
+    Ok(())
+  }
+}
+
+macro_rules! reject_variant_index_serializer_methods {
+  ($($name:ident($($arg:ident: $ty:ty),*) -> $ret:ty;)*) => {
+    $(
+      fn $name(self, $($arg: $ty),*) -> Result<$ret, Self::Error> {
+        $(let _ = &$arg;)*
+        Err(VariantIndexError)
+      }
+    )*
+  };
+}
+
+impl Serializer for VariantIndexSerializer<'_> {
+  type Ok = ();
+  type Error = VariantIndexError;
+  type SerializeSeq = Impossible<(), VariantIndexError>;
+  type SerializeTuple = Impossible<(), VariantIndexError>;
+  type SerializeTupleStruct = Impossible<(), VariantIndexError>;
+  type SerializeTupleVariant = VariantIndexTupleVariant;
+  type SerializeMap = Impossible<(), VariantIndexError>;
+  type SerializeStruct = Impossible<(), VariantIndexError>;
+  type SerializeStructVariant = Impossible<(), VariantIndexError>;
+
+  fn is_human_readable(&self) -> bool {
+    false
+  }
+
+  fn serialize_tuple_variant(
+    self,
+    _: &'static str,
+    variant_index: u32,
+    _: &'static str,
+    _: usize,
+  ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+    *self.index = Some(variant_index);
+    Ok(VariantIndexTupleVariant)
+  }
+
+  fn collect_str<T>(self, _: &T) -> Result<Self::Ok, Self::Error>
+  where
+    T: ?Sized + core::fmt::Display,
+  {
+    Err(VariantIndexError)
+  }
+
+  fn serialize_some<T>(self, _: &T) -> Result<Self::Ok, Self::Error>
+  where
+    T: ?Sized + Serialize,
+  {
+    Err(VariantIndexError)
+  }
+
+  fn serialize_newtype_struct<T>(self, _: &'static str, _: &T) -> Result<Self::Ok, Self::Error>
+  where
+    T: ?Sized + Serialize,
+  {
+    Err(VariantIndexError)
+  }
+
+  fn serialize_newtype_variant<T>(
+    self,
+    _: &'static str,
+    _: u32,
+    _: &'static str,
+    _: &T,
+  ) -> Result<Self::Ok, Self::Error>
+  where
+    T: ?Sized + Serialize,
+  {
+    Err(VariantIndexError)
+  }
+
+  reject_variant_index_serializer_methods! {
+    serialize_bool(value: bool) -> ();
+    serialize_i8(value: i8) -> ();
+    serialize_i16(value: i16) -> ();
+    serialize_i32(value: i32) -> ();
+    serialize_i64(value: i64) -> ();
+    serialize_i128(value: i128) -> ();
+    serialize_u8(value: u8) -> ();
+    serialize_u16(value: u16) -> ();
+    serialize_u32(value: u32) -> ();
+    serialize_u64(value: u64) -> ();
+    serialize_u128(value: u128) -> ();
+    serialize_f32(value: f32) -> ();
+    serialize_f64(value: f64) -> ();
+    serialize_char(value: char) -> ();
+    serialize_str(value: &str) -> ();
+    serialize_bytes(value: &[u8]) -> ();
+    serialize_none() -> ();
+    serialize_unit() -> ();
+    serialize_unit_struct(name: &'static str) -> ();
+    serialize_unit_variant(name: &'static str, variant_index: u32, variant: &'static str) -> ();
+    serialize_seq(len: Option<usize>) -> Impossible<(), VariantIndexError>;
+    serialize_tuple(len: usize) -> Impossible<(), VariantIndexError>;
+    serialize_tuple_struct(name: &'static str, len: usize) -> Impossible<(), VariantIndexError>;
+    serialize_map(len: Option<usize>) -> Impossible<(), VariantIndexError>;
+    serialize_struct(name: &'static str, len: usize) -> Impossible<(), VariantIndexError>;
+    serialize_struct_variant(name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Impossible<(), VariantIndexError>;
+  }
+}
+
+fn assert_semantic_variant_index<T: Serialize>(value: &T, expected: u32) {
+  let mut index = None;
+  value
+    .serialize(VariantIndexSerializer { index: &mut index })
+    .unwrap();
+  assert_eq!(index, Some(expected));
+}
 
 fn assert_wire<T>(value: &T, json: &str)
 where
@@ -130,6 +285,7 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
 
   let v4 = LoopbackAddr::try_from("127.0.0.1:8080".parse::<SocketAddr>().unwrap()).unwrap();
   assert_wire(&v4, r#"{"v4":{"ip":"127.0.0.1","port":8080}}"#);
+  assert_semantic_variant_index(&v4, 0);
   assert_tokens(
     &v4.readable(),
     &[
@@ -179,6 +335,7 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
     &v6,
     r#"{"v6":{"ip":"::1","port":443,"flowinfo":0,"scope_id":0}}"#,
   );
+  assert_semantic_variant_index(&v6, 1);
   assert_tokens(
     &v6.compact(),
     &[
@@ -222,6 +379,7 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
 
   let scoped =
     LinkLocalAddr::try_from(SocketAddrV6::new("fe80::1".parse().unwrap(), 443, 7, 42)).unwrap();
+  assert_semantic_variant_index(&scoped, 2);
   assert_wire(
     &scoped,
     r#"{"v6":{"ip":"fe80::1","port":443,"flowinfo":7,"scope_id":42}}"#,
@@ -258,8 +416,8 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
       Token::TupleVariantEnd,
     ],
   );
-  // This literal freezes the real compact wire representation for semantic
-  // V6Extended (the third binary variant, index 2 in the data model).
+  // This literal freezes rmp-serde's name-based compact representation and
+  // all V6Extended fields; numeric variant indices are asserted separately.
   const V6_EXTENDED_MSGPACK: &[u8] = &[
     129, 170, 86, 54, 69, 120, 116, 101, 110, 100, 101, 100, 148, 220, 0, 16, 204, 254, 204, 128,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 205, 1, 187, 7, 42,
@@ -318,7 +476,8 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
     ],
     "not a loopback socket address",
   );
-  // The explicit V6Extended variant is binary tag 2.
+  // The V6Extended token fixture covers its four-field shape; the numeric
+  // variant index is asserted separately through VariantIndexSerializer.
   assert_de_tokens_error::<Compact<LoopbackAddr>>(
     &[
       Token::TupleVariant {
