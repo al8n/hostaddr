@@ -1,17 +1,15 @@
 # Unreleased
 
-No changes since 1.0.0.
+## 1.0.0-rc.3 (2026-10-13)
+
+> Unpublished release candidate. The final `1.0.0` release remains pending.
+
+Production code, public API, feature set, and wire semantics are unchanged from
+`1.0.0-rc.2`. RC3 contains release hardening, raises the `cheap-clone`
+minimum to `0.3.2`, replaces the direct `paste` graph with `pastey`, and
+migrates the Serde compatibility tests to `serde_test2`.
 
 # RELEASED
-
-## 1.0.0 (2026-10-13)
-
-Production code, public API, feature set, runtime dependencies, and wire
-contracts are unchanged from `1.0.0-rc.2`.
-
-Changes since `1.0.0-rc.2` are release hardening and GitHub Release creation.
-Complete migration and compatibility guidance remains in the `1.0.0-rc.2`
-and `1.0.0-rc.1` sections below.
 
 ## 1.0.0-rc.2 (2026-10-08)
 

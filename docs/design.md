@@ -1,7 +1,8 @@
 # Address Abstraction Design (v2)
 
-> Status: `1.0.0` is the stable release as of 2026-10-13. The core taxonomy
-> and wire contract below are implemented in the stable release.
+> Status: `1.0.0-rc.3` is an unpublished validation release dated 2026-10-13.
+> The core taxonomy and wire contract below are unchanged from RC2; final
+> `1.0.0` publication remains pending.
 
 ## Goals
 
@@ -380,7 +381,7 @@ tags:
 
 The corresponding human-readable names are `unix`, `abstract`, `named_pipe`,
 `vsock`, `host`, `ipc`, and `loopback`. These names and tags are part of the
-stable `1.0.0` compatibility contract. Deserialization must continue to
+planned `1.0.0` compatibility contract. Deserialization must continue to
 validate domain and semantic-address invariants rather than constructing
 unchecked values.
 
@@ -391,7 +392,7 @@ another variant. New variants use new tags and names, and existing tags are
 never reused. `Domain` and `Buffer` keep their existing data-model boundary:
 human-readable formats carry validated text, while binary formats carry the
 validated byte representation. This compatibility promise covers the
-`1.0.0-rc.1`/`rc.2` migration and the stable `1.0.x` releases; it does not
+`1.0.0-rc.1`/`rc.2` migration and the pending `1.0.x` releases; it does not
 promise compatibility with malformed values produced by pre-1.0 unchecked
 constructors.
 
@@ -400,13 +401,13 @@ Semantic IP and socket wrappers are part of the same compatibility contract:
 | Model | Validated data | Human-readable writer | Human-readable reader | Binary representation |
 | --- | --- | --- | --- | --- |
 | `*IpAddr` | `IpAddr` | IP string | IP string | existing `IpAddr` representation |
-| `*Addr` V4 | `SocketAddrV4` | stable RC2 object `{"v4":{"ip":"...","port":...}}` | stable object or RC1 string | tag `0`: `V4(ip, port)` |
-| `*Addr` V6 | `SocketAddrV6` | stable RC2 object `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | stable object or RC1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
+| `*Addr` V4 | `SocketAddrV4` | RC2 object `{"v4":{"ip":"...","port":...}}` | object or RC1 string | tag `0`: `V4(ip, port)` |
+| `*Addr` V6 | `SocketAddrV6` | RC2 object `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | object or RC1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
 
-Stable `1.0.0` writers use the RC2 object forms and readers accept RC1 socket
-strings and legacy binary tags. RC1 cannot read stable object forms or binary
+Planned `1.0.0` writers use the RC2 object forms and readers accept RC1 socket
+strings and legacy binary tags. RC1 cannot read RC2 object forms or binary
 tag `2`. RC1 strings and legacy binary tag `1` omit IPv6 `flowinfo` and
-`scope_id`, so stable readers read them as zero; metadata already lost by an
+`scope_id`, so RC2 readers read them as zero; metadata already lost by an
 RC1 writer cannot be reconstructed.
 
 ## 0.3.x to 1.0 migration

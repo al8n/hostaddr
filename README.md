@@ -36,9 +36,13 @@ them as identity keys when that is the desired policy.
 
 ## Release status
 
-`1.0.0` is the latest stable release (2026-10-13). The stable release:
+`0.3.0` is the latest published stable release. `1.0.0-rc.3` (2026-10-13)
+is an unpublished release candidate for final 1.0 validation. RC3 contains
+release hardening, the `cheap-clone` `0.3.2` minimum, the `pastey` dependency
+graph, and the Serde test-harness migration; production API, features, and
+wire semantics are unchanged. The final `1.0.0` release is still pending:
 
-- freezes the validated host/address and IPC taxonomy APIs;
+- validates the frozen host/address and IPC taxonomy APIs;
 - requires Rust `1.89` or newer;
 - keeps `no_std`/`no-alloc` and `alloc` feature combinations buildable;
 - documents the Serde representation and compatibility policy;
@@ -65,8 +69,11 @@ them as identity keys when that is the desired policy.
 
 ```toml
 [dependencies]
-hostaddr = "1"
+hostaddr = "0.3"
 ```
+
+To evaluate the unpublished candidate explicitly, use
+`hostaddr = "=1.0.0-rc.3"`; the `0.3` line remains the latest stable release.
 
 ### Feature Flags
 
@@ -171,10 +178,10 @@ These tags and variant names are part of the `1.0.0` wire-format contract. New
 variants must not reuse an existing tag; deserialization also re-checks the
 validated domain and semantic-address invariants.
 
-Stable `1.0.0` semantic socket writers use the RC2 object forms and readers
-accept RC1 strings and legacy binary tags. RC1 readers cannot read the stable
-object forms or binary tag `2`; metadata omitted by an RC1 writer cannot be
-reconstructed.
+The planned `1.0.0` semantic socket writers use the RC2 object forms and
+readers accept RC1 strings and legacy binary tags. RC1 readers cannot read the
+planned object forms or binary tag `2`; metadata omitted by an RC1 writer
+cannot be reconstructed.
 
 Semantic IP and socket wrappers use the following data model and Serde
 contract:
