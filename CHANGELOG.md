@@ -1,9 +1,22 @@
 # Unreleased
 
+No changes since 1.0.0.
+
+# RELEASED
+
+## 1.0.0 (2026-10-13)
+
+Production code, public API, feature set, runtime dependencies, and wire
+contracts are unchanged from `1.0.0-rc.2`.
+
+Changes since `1.0.0-rc.2` are release hardening and GitHub Release creation.
+Complete migration and compatibility guidance remains in the `1.0.0-rc.2`
+and `1.0.0-rc.1` sections below.
+
 ## 1.0.0-rc.2 (2026-10-08)
 
-> Published release candidate. The final `1.0.0` release remains subject to
-> downstream validation and the compatibility checks described below.
+> Published release candidate used for downstream validation before stable
+> `1.0.0`.
 
 ### Domain and Serde correctness
 
@@ -44,8 +57,8 @@
 
 ## 1.0.0-rc.1 (2026-10-07)
 
-> Published release candidate. The final `1.0.0` release remains subject to
-> downstream validation and the compatibility checks described above.
+> First published release candidate for the 1.0 API; subsequent candidates
+> and the stable release followed.
 
 ## Soundness and correctness
 
@@ -97,8 +110,6 @@ tags listed in the design document. The undocumented implicit `idna` feature
 is also removed: downstream manifests that explicitly enabled it but do not
 need IDNA should delete it; manifests that need IDNA should select `alloc` or
 `std` instead, because those are the public features that provide IDNA support.
-
-# RELEASED
 
 ## 0.3.0 (Jul 2nd, 2026)
 
