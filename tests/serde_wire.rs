@@ -11,7 +11,9 @@ use hostaddr::{Addr, Buffer, Domain, Host, HostAddr, LocalAddr};
 use hostaddr::{IpcAddr, UnixAddr};
 use hostaddr::{LinkLocalAddr, LoopbackAddr, LoopbackIpAddr};
 use serde::{de::DeserializeOwned, Serialize};
-use serde_test2::{assert_ser_tokens, assert_tokens, Configure, Token};
+use serde_test2::{
+  assert_de_tokens_error, assert_ser_tokens, assert_tokens, Compact, Configure, Token,
+};
 
 fn assert_wire<T>(value: &T, json: &str)
 where
@@ -255,6 +257,99 @@ fn semantic_ip_and_socket_wire_is_frozen_and_backward_compatible() {
       Token::U32(42),
       Token::TupleVariantEnd,
     ],
+  );
+  // This literal freezes the real compact wire representation for semantic
+  // V6Extended (the third binary variant, index 2 in the data model).
+  const V6_EXTENDED_MSGPACK: &[u8] = &[
+    129, 170, 86, 54, 69, 120, 116, 101, 110, 100, 101, 100, 148, 220, 0, 16, 204, 254, 204, 128,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 205, 1, 187, 7, 42,
+  ];
+  assert_eq!(rmp_serde::to_vec(&scoped).unwrap(), V6_EXTENDED_MSGPACK);
+  assert_eq!(
+    rmp_serde::from_slice::<LinkLocalAddr>(V6_EXTENDED_MSGPACK).unwrap(),
+    scoped
+  );
+
+  assert_de_tokens_error::<Compact<LoopbackAddr>>(
+    &[
+      Token::TupleVariant {
+        name: "BinarySocketAddr",
+        variant: "V4",
+        len: 2,
+      },
+      Token::Tuple { len: 4 },
+      Token::U8(192),
+      Token::U8(0),
+      Token::U8(2),
+      Token::U8(1),
+      Token::TupleEnd,
+      Token::U16(80),
+      Token::TupleVariantEnd,
+    ],
+    "not a loopback socket address",
+  );
+  assert_de_tokens_error::<Compact<LoopbackAddr>>(
+    &[
+      Token::TupleVariant {
+        name: "BinarySocketAddr",
+        variant: "V6",
+        len: 2,
+      },
+      Token::Tuple { len: 16 },
+      Token::U8(0x20),
+      Token::U8(0x01),
+      Token::U8(0x0d),
+      Token::U8(0xb8),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(1),
+      Token::TupleEnd,
+      Token::U16(80),
+      Token::TupleVariantEnd,
+    ],
+    "not a loopback socket address",
+  );
+  // The explicit V6Extended variant is binary tag 2.
+  assert_de_tokens_error::<Compact<LoopbackAddr>>(
+    &[
+      Token::TupleVariant {
+        name: "BinarySocketAddr",
+        variant: "V6Extended",
+        len: 4,
+      },
+      Token::Tuple { len: 16 },
+      Token::U8(0x20),
+      Token::U8(0x01),
+      Token::U8(0x0d),
+      Token::U8(0xb8),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(0),
+      Token::U8(1),
+      Token::TupleEnd,
+      Token::U16(80),
+      Token::U32(7),
+      Token::U32(42),
+      Token::TupleVariantEnd,
+    ],
+    "not a loopback socket address",
   );
 
   assert!(serde_json::from_str::<LoopbackAddr>("\"192.0.2.1:80\"").is_err());

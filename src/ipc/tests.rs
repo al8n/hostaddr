@@ -1,5 +1,6 @@
 use super::*;
 use core::net::{IpAddr, SocketAddr};
+#[cfg(feature = "serde")]
 use serde_test2::{assert_tokens, Configure, Token};
 
 #[cfg(all(feature = "serde", any(all(unix, not(target_os = "linux")), windows)))]
