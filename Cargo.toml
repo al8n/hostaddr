@@ -1,6 +1,6 @@
 [package]
 name = "hostaddr"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
@@ -70,7 +70,7 @@ memchr = { version = "2", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 simdutf8 = { version = "0.1", default-features = false }
 thiserror = { version = "2", default-features = false }
-cheap-clone = { version = "0.3", default-features = false, optional = true }
+cheap-clone = { version = "0.3.2", default-features = false, optional = true }
 
 idna = { version = "1", default-features = false, optional = true }
 getrandom = { version = "0.4", default-features = false, optional = true }
@@ -90,8 +90,8 @@ quickcheck = { version = "1", optional = true, default-features = false }
 quickcheck = "1"
 quickcheck_macros = "1"
 arbitrary = "1"
-paste = "1"
-bincode = "1"
+paste = { package = "pastey", version = "0.2.3" }
+serde_test2 = "2"
 serde_json = "1"
 serde = { version = "1", features = ["rc"] }
 rmp-serde = "1"

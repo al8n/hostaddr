@@ -1,8 +1,8 @@
 # Address Abstraction Design (v2)
 
-> Status: the core taxonomy below is implemented in the `0.3.x` line and is
-> being stabilized for `1.0.0`. `1.0.0-rc.2` was published on 2026-10-08 and
-> is the current validation release; the final `1.0.0` remains pending.
+> Status: `1.0.0-rc.3` is an unpublished validation release dated 2026-10-13.
+> The core taxonomy and wire contract below are unchanged from RC2; final
+> `1.0.0` publication remains pending.
 
 ## Goals
 
@@ -381,9 +381,9 @@ tags:
 
 The corresponding human-readable names are `unix`, `abstract`, `named_pipe`,
 `vsock`, `host`, `ipc`, and `loopback`. These names and tags are part of the
-`1.0.0-rc.1` through `1.0.x` compatibility contract. Deserialization must
-continue to validate domain and semantic-address invariants rather than
-constructing unchecked values.
+planned `1.0.0` compatibility contract. Deserialization must continue to
+validate domain and semantic-address invariants rather than constructing
+unchecked values.
 
 The contract applies across supported platforms and both human-readable and
 binary Serde formats. A variant that is not compiled for the target platform
@@ -392,7 +392,7 @@ another variant. New variants use new tags and names, and existing tags are
 never reused. `Domain` and `Buffer` keep their existing data-model boundary:
 human-readable formats carry validated text, while binary formats carry the
 validated byte representation. This compatibility promise covers the
-`1.0.0-rc.1`/`rc.2` migration and subsequent `1.0.x` releases; it does not
+`1.0.0-rc.1`/`rc.2` migration and the pending `1.0.x` releases; it does not
 promise compatibility with malformed values produced by pre-1.0 unchecked
 constructors.
 
@@ -401,13 +401,14 @@ Semantic IP and socket wrappers are part of the same compatibility contract:
 | Model | Validated data | Human-readable writer | Human-readable reader | Binary representation |
 | --- | --- | --- | --- | --- |
 | `*IpAddr` | `IpAddr` | IP string | IP string | existing `IpAddr` representation |
-| `*Addr` V4 | `SocketAddrV4` | `{"v4":{"ip":"...","port":...}}` | RC2 object or RC1 string | tag `0`: `V4(ip, port)` |
-| `*Addr` V6 | `SocketAddrV6` | `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | RC2 object or RC1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
+| `*Addr` V4 | `SocketAddrV4` | RC2 object `{"v4":{"ip":"...","port":...}}` | object or RC1 string | tag `0`: `V4(ip, port)` |
+| `*Addr` V6 | `SocketAddrV6` | RC2 object `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | object or RC1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
 
-RC2 reads RC1 socket strings and legacy binary tags. RC1 cannot read RC2
-objects or binary tag `2`. RC1 strings and legacy binary tag `1` omit IPv6
-`flowinfo` and `scope_id`, so RC2 reads them as zero; metadata already lost by
-an RC1 writer cannot be reconstructed.
+Planned `1.0.0` writers use the RC2 object forms and readers accept RC1 socket
+strings and legacy binary tags. RC1 cannot read RC2 object forms or binary
+tag `2`. RC1 strings and legacy binary tag `1` omit IPv6 `flowinfo` and
+`scope_id`, so RC2 readers read them as zero; metadata already lost by an
+RC1 writer cannot be reconstructed.
 
 ## 0.3.x to 1.0 migration
 

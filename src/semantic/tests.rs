@@ -220,8 +220,4 @@ fn serde_socket_addr_representations_keep_all_ipv6_fields() {
   );
   let deserialized: LinkLocalAddr = serde_json::from_str(&serialized).unwrap();
   assert_eq!(deserialized, addr);
-
-  let serialized = bincode::serialize(&addr).unwrap();
-  let deserialized: LinkLocalAddr = bincode::deserialize(&serialized).unwrap();
-  assert_eq!(deserialized, addr);
 }

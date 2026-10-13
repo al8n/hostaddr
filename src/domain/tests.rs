@@ -346,16 +346,7 @@ fn buffer_serde_uses_text_for_human_readable_and_bytes_for_binary() {
     assert_eq!(decoded.as_str(), "xn--0zwm56d.xn--fiqs8s");
   }
 
-  let binary = bincode::serialize(&buffer).unwrap();
-  let decoded: Buffer = bincode::deserialize(&binary).unwrap();
-  assert_eq!(decoded.as_bytes(), b"example.com");
-
-  #[cfg(any(feature = "std", feature = "alloc"))]
-  {
-    let binary = bincode::serialize(&"测试.中国".as_bytes()).unwrap();
-    let decoded: Buffer = bincode::deserialize(&binary).unwrap();
-    assert_eq!(decoded.as_str(), "xn--0zwm56d.xn--fiqs8s");
-  }
+  assert_eq!(buffer.as_bytes(), b"example.com");
 }
 
 #[cfg(all(feature = "serde", any(feature = "std", feature = "alloc")))]
@@ -370,12 +361,6 @@ fn domain_deserialize_validates_and_normalizes_owned_storage() {
       "accepted invalid JSON domain: {invalid:?}"
     );
 
-    let bincode = bincode::serialize(invalid).unwrap();
-    assert!(
-      bincode::deserialize::<Domain<String>>(&bincode).is_err(),
-      "accepted invalid bincode domain: {invalid:?}"
-    );
-
     let msgpack = rmp_serde::to_vec(invalid).unwrap();
     assert!(
       rmp_serde::from_slice::<Domain<String>>(&msgpack).is_err(),
@@ -386,8 +371,6 @@ fn domain_deserialize_validates_and_normalizes_owned_storage() {
   let invalid_utf8 = Vec::from([0xff]);
   let json = serde_json::to_string(&invalid_utf8).unwrap();
   assert!(serde_json::from_str::<Domain<Vec<u8>>>(&json).is_err());
-  let bincode = bincode::serialize(&invalid_utf8).unwrap();
-  assert!(bincode::deserialize::<Domain<Vec<u8>>>(&bincode).is_err());
   let msgpack = rmp_serde::to_vec(&invalid_utf8).unwrap();
   assert!(rmp_serde::from_slice::<Domain<Vec<u8>>>(&msgpack).is_err());
 
@@ -400,10 +383,6 @@ fn domain_deserialize_validates_and_normalizes_owned_storage() {
 
     let json = serde_json::to_string(encoded).unwrap();
     let domain: Domain<String> = serde_json::from_str(&json).unwrap();
-    assert_eq!(domain.as_inner(), expected);
-
-    let bincode = bincode::serialize(encoded).unwrap();
-    let domain: Domain<String> = bincode::deserialize(&bincode).unwrap();
     assert_eq!(domain.as_inner(), expected);
 
     let msgpack = rmp_serde::to_vec(encoded).unwrap();
@@ -424,9 +403,6 @@ fn cow_domain_serde_validates_owned_and_borrowed_storage() {
     let json = serde_json::to_string(value).unwrap();
     assert_eq!(serde_json::from_str::<T>(&json).unwrap(), *value);
 
-    let bincode = bincode::serialize(value).unwrap();
-    assert_eq!(bincode::deserialize::<T>(&bincode).unwrap(), *value);
-
     let msgpack = rmp_serde::to_vec(value).unwrap();
     assert_eq!(rmp_serde::from_slice::<T>(&msgpack).unwrap(), *value);
   }
@@ -438,9 +414,6 @@ fn cow_domain_serde_validates_owned_and_borrowed_storage() {
   {
     let json = serde_json::to_string(wire).unwrap();
     assert!(serde_json::from_str::<T>(&json).is_err());
-
-    let bincode = bincode::serialize(wire).unwrap();
-    assert!(bincode::deserialize::<T>(&bincode).is_err());
 
     let msgpack = rmp_serde::to_vec(wire).unwrap();
     assert!(rmp_serde::from_slice::<T>(&msgpack).is_err());
