@@ -1,8 +1,15 @@
 # Unreleased
 
+## 1.0.0 (2026-10-15)
+
+> First stable release of the 1.0 API.
+
+Production code, public API, feature set, runtime dependencies, and wire
+contracts are unchanged from `1.0.0-rc.3`.
+
 ## 1.0.0-rc.3 (2026-10-13)
 
-> Unpublished release candidate. The final `1.0.0` release remains pending.
+> Published validation candidate for the stable `1.0.0` release.
 
 Production code, public API, feature set, and wire semantics are unchanged from
 `1.0.0-rc.2`. RC3 contains release hardening, raises the `cheap-clone`
