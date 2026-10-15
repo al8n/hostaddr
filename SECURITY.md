@@ -2,10 +2,9 @@
 
 ## Supported versions
 
-The latest stable release line is `0.3.x`. Security reports are welcome for
-the supported `0.3.x` line. `1.0.0-rc.3` is an unpublished prerelease and is
-not a stable support promise; reports for it are still welcome during RC
-validation.
+The latest stable release line is `1.0.x`. Security reports are welcome for
+the supported `1.0.x` line. The previous `0.3.x` line remains supported as
+intended.
 
 ## Reporting a vulnerability
 
