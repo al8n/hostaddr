@@ -185,19 +185,24 @@ These tags and variant names are part of the `1.0.0` wire-format contract. New
 variants must not reuse an existing tag; deserialization also re-checks the
 validated domain and semantic-address invariants.
 
+The stable `1.0.0` semantic socket writers use the RC2 object forms and
+readers accept RC1 strings and legacy binary tags. RC1 readers cannot read the
+stable object forms or binary tag `2`; metadata omitted by an RC1 writer
+cannot be reconstructed.
+
 Semantic IP and socket wrappers use the following data model and Serde
 contract:
 
 | Model | Validated data | Human-readable writer | Human-readable reader | Binary representation |
 |------|-----------------|------------------------|------------------------|-----------------------|
 | `*IpAddr` | `IpAddr` | IP string | IP string | existing `IpAddr` representation |
-| `*Addr` V4 | `SocketAddrV4` | `{"v4":{"ip":"...","port":...}}` | rc2 object or rc1 string | tag `0`: `V4(ip, port)` |
-| `*Addr` V6 | `SocketAddrV6` | `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | rc2 object or rc1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
+| `*Addr` V4 | `SocketAddrV4` | stable RC2 object `{"v4":{"ip":"...","port":...}}` | stable object or RC1 string | tag `0`: `V4(ip, port)` |
+| `*Addr` V6 | `SocketAddrV6` | stable RC2 object `{"v6":{"ip":"...","port":...,"flowinfo":...,"scope_id":...}}` | stable object or RC1 string | tag `1`: legacy `V6(ip, port)`; tag `2`: `V6Extended(ip, port, flowinfo, scope_id)` |
 
-RC2 reads the RC1 socket strings (and legacy binary tags). RC1 cannot read the
-RC2 human-readable objects or binary tag `2`. RC1 strings and legacy binary
-tag `1` do not carry IPv6 `flowinfo` or `scope_id`, so those fields are zero
-when RC2 reads them; metadata already lost by an RC1 writer cannot be
+Stable `1.0.0` readers accept RC1 socket strings and legacy binary tags. RC1
+cannot read the stable object forms or binary tag `2`. RC1 strings and legacy
+binary tag `1` do not carry IPv6 `flowinfo` or `scope_id`, so stable readers
+read them as zero; metadata already lost by an RC1 writer cannot be
 reconstructed.
 
 ```rust

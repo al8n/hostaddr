@@ -14,10 +14,28 @@
   the old feature name as a forward would introduce a circular dependency.
 - Publish this version before `cheap-clone` 1.0, which requires `hostaddr >= 1.1`.
 
+## 1.0.0 (2026-10-15)
+
+> First stable release of the 1.0 API.
+
+Production code, public API, feature set, runtime dependencies, and wire
+contracts are unchanged from `1.0.0-rc.3`.
+
+## 1.0.0-rc.3 (2026-10-13)
+
+> Published validation candidate for the stable `1.0.0` release.
+
+Production code, public API, feature set, and wire semantics are unchanged from
+`1.0.0-rc.2`. RC3 contains release hardening, raises the `cheap-clone`
+minimum to `0.3.2`, replaces the direct `paste` graph with `pastey`, and
+migrates the Serde compatibility tests to `serde_test2`.
+
+# RELEASED
+
 ## 1.0.0-rc.2 (2026-10-08)
 
-> Published release candidate. The final `1.0.0` release remains subject to
-> downstream validation and the compatibility checks described below.
+> Published release candidate used for downstream validation before stable
+> `1.0.0`.
 
 ### Domain and Serde correctness
 
@@ -58,8 +76,8 @@
 
 ## 1.0.0-rc.1 (2026-10-07)
 
-> Published release candidate. The final `1.0.0` release remains subject to
-> downstream validation and the compatibility checks described above.
+> First published release candidate for the 1.0 API; subsequent candidates
+> and the stable release followed.
 
 ## Soundness and correctness
 
@@ -111,8 +129,6 @@ tags listed in the design document. The undocumented implicit `idna` feature
 is also removed: downstream manifests that explicitly enabled it but do not
 need IDNA should delete it; manifests that need IDNA should select `alloc` or
 `std` instead, because those are the public features that provide IDNA support.
-
-# RELEASED
 
 ## 0.3.0 (Jul 2nd, 2026)
 

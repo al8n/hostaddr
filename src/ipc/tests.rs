@@ -1,23 +1,25 @@
 use super::*;
 use core::net::{IpAddr, SocketAddr};
+#[cfg(feature = "serde")]
+use serde_test2::{assert_tokens, Configure, Token};
 
 #[cfg(all(feature = "serde", any(all(unix, not(target_os = "linux")), windows)))]
 struct NonSerde;
 
 #[cfg(feature = "serde")]
-fn assert_bincode_ipc_roundtrip(ipc: IpcAddr<&str, &[u8]>) {
-  let serialized = bincode::serialize(&ipc).unwrap();
-  let deserialized: IpcAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+fn assert_rmp_ipc_roundtrip(ipc: IpcAddr<&str, &[u8]>) {
+  let serialized = rmp_serde::to_vec(&ipc).unwrap();
+  let deserialized: IpcAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, ipc);
 
   let addr: Addr<&str, &str, &[u8]> = ipc.into();
-  let serialized = bincode::serialize(&addr).unwrap();
-  let deserialized: Addr<&str, &str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&addr).unwrap();
+  let deserialized: Addr<&str, &str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, addr);
 
   let local: LocalAddr<&str, &[u8]> = ipc.into();
-  let serialized = bincode::serialize(&local).unwrap();
-  let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&local).unwrap();
+  let deserialized: LocalAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, local);
 }
 
@@ -330,7 +332,7 @@ fn ipc_serde_uses_stable_tags() {
     let deserialized: IpcAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
     assert_eq!(deserialized, ipc);
 
-    assert_bincode_ipc_roundtrip(ipc);
+    assert_rmp_ipc_roundtrip(ipc);
   }
 
   #[cfg(target_os = "linux")]
@@ -340,18 +342,18 @@ fn ipc_serde_uses_stable_tags() {
     let deserialized: IpcAddr<&str, [u8; 8]> = rmp_serde::from_slice(&serialized).unwrap();
     assert_eq!(deserialized, ipc);
 
-    let serialized = bincode::serialize(&ipc).unwrap();
-    let deserialized: IpcAddr<&str, [u8; 8]> = bincode::deserialize(&serialized).unwrap();
+    let serialized = rmp_serde::to_vec(&ipc).unwrap();
+    let deserialized: IpcAddr<&str, [u8; 8]> = rmp_serde::from_slice(&serialized).unwrap();
     assert_eq!(deserialized, ipc);
 
     let addr: Addr<&str, &str, [u8; 8]> = ipc.into();
-    let serialized = bincode::serialize(&addr).unwrap();
-    let deserialized: Addr<&str, &str, [u8; 8]> = bincode::deserialize(&serialized).unwrap();
+    let serialized = rmp_serde::to_vec(&addr).unwrap();
+    let deserialized: Addr<&str, &str, [u8; 8]> = rmp_serde::from_slice(&serialized).unwrap();
     assert_eq!(deserialized, addr);
 
     let local: LocalAddr<&str, [u8; 8]> = ipc.into();
-    let serialized = bincode::serialize(&local).unwrap();
-    let deserialized: LocalAddr<&str, [u8; 8]> = bincode::deserialize(&serialized).unwrap();
+    let serialized = rmp_serde::to_vec(&local).unwrap();
+    let deserialized: LocalAddr<&str, [u8; 8]> = rmp_serde::from_slice(&serialized).unwrap();
     assert_eq!(deserialized, local);
   }
 
@@ -371,7 +373,7 @@ fn ipc_serde_uses_stable_tags() {
       assert_eq!(deserialized, ipc);
     }
 
-    assert_bincode_ipc_roundtrip(borrowed);
+    assert_rmp_ipc_roundtrip(borrowed);
   }
 
   #[cfg(all(feature = "vsock", target_os = "linux"))]
@@ -382,7 +384,7 @@ fn ipc_serde_uses_stable_tags() {
     let deserialized: IpcAddr<&str, &[u8]> = serde_json::from_str(&serialized).unwrap();
     assert_eq!(deserialized, ipc);
 
-    assert_bincode_ipc_roundtrip(ipc);
+    assert_rmp_ipc_roundtrip(ipc);
   }
 }
 
@@ -390,37 +392,30 @@ fn ipc_serde_uses_stable_tags() {
 #[test]
 fn ipc_serde_uses_numeric_tags_for_binary_formats() {
   let ipc: IpcAddr<&str, &[u8]> = UnixAddr::new("/tmp/app.sock").into();
-  let serialized = bincode::serialize(&ipc).unwrap();
-  assert_eq!(serialized.first().copied(), Some(0));
-  let deserialized: IpcAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&ipc).unwrap();
+  let deserialized: IpcAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, ipc);
 
   let addr: Addr<&str, &str, &[u8]> = ipc.into();
-  let serialized = bincode::serialize(&addr).unwrap();
-  assert_eq!(serialized.first().copied(), Some(1));
-  assert_eq!(serialized.get(1).copied(), Some(0));
-  let deserialized: Addr<&str, &str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&addr).unwrap();
+  let deserialized: Addr<&str, &str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, addr);
 
   let local: LocalAddr<&str, &[u8]> = ipc.into();
-  let serialized = bincode::serialize(&local).unwrap();
-  assert_eq!(serialized.first().copied(), Some(1));
-  assert_eq!(serialized.get(1).copied(), Some(0));
-  let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&local).unwrap();
+  let deserialized: LocalAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, local);
 
   let host: Addr<&str, &str, &[u8]> =
     HostAddr::<&str>::from(("127.0.0.1".parse::<IpAddr>().unwrap(), 8080)).into();
-  let serialized = bincode::serialize(&host).unwrap();
-  assert_eq!(serialized.first().copied(), Some(0));
-  let deserialized: Addr<&str, &str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&host).unwrap();
+  let deserialized: Addr<&str, &str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, host);
 
   let loopback = LoopbackAddr::try_from("127.0.0.1:8080".parse::<SocketAddr>().unwrap()).unwrap();
   let local: LocalAddr<&str, &[u8]> = loopback.into();
-  let serialized = bincode::serialize(&local).unwrap();
-  assert_eq!(serialized.first().copied(), Some(0));
-  let deserialized: LocalAddr<&str, &[u8]> = bincode::deserialize(&serialized).unwrap();
+  let serialized = rmp_serde::to_vec(&local).unwrap();
+  let deserialized: LocalAddr<&str, &[u8]> = rmp_serde::from_slice(&serialized).unwrap();
   assert_eq!(deserialized, local);
 }
 
@@ -435,8 +430,7 @@ fn serde_private_tags_switch_between_text_and_numbers() {
   ];
   for (tag, json, number) in ipc_tags {
     assert_eq!(serde_json::to_string(&tag).unwrap(), json);
-    assert_eq!(bincode::serialize(&tag).unwrap(), [number]);
-    assert_eq!(bincode::deserialize::<IpcAddrTag>(&[number]).unwrap(), tag);
+    assert_tokens(&tag.compact(), &[Token::U8(number)]);
   }
 
   let addr_tags = [
@@ -445,8 +439,7 @@ fn serde_private_tags_switch_between_text_and_numbers() {
   ];
   for (tag, json, number) in addr_tags {
     assert_eq!(serde_json::to_string(&tag).unwrap(), json);
-    assert_eq!(bincode::serialize(&tag).unwrap(), [number]);
-    assert_eq!(bincode::deserialize::<AddrVariant>(&[number]).unwrap(), tag);
+    assert_tokens(&tag.compact(), &[Token::U8(number)]);
   }
 
   let local_tags = [
@@ -455,11 +448,7 @@ fn serde_private_tags_switch_between_text_and_numbers() {
   ];
   for (tag, json, number) in local_tags {
     assert_eq!(serde_json::to_string(&tag).unwrap(), json);
-    assert_eq!(bincode::serialize(&tag).unwrap(), [number]);
-    assert_eq!(
-      bincode::deserialize::<LocalAddrVariant>(&[number]).unwrap(),
-      tag
-    );
+    assert_tokens(&tag.compact(), &[Token::U8(number)]);
   }
 }
 
