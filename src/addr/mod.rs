@@ -85,9 +85,6 @@ where
   }
 }
 
-#[cfg(feature = "cheap-clone")]
-impl<S: cheap_clone::CheapClone> cheap_clone::CheapClone for HostAddr<S> {}
-
 impl<S> core::fmt::Display for HostAddr<S>
 where
   S: core::fmt::Display,
