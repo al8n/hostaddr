@@ -1,5 +1,19 @@
 # Unreleased
 
+## 1.1.0
+
+### CheapClone integration migration
+
+- Remove the optional `cheap-clone` dependency, its feature and storage-feature
+  forwarding, and the `CheapClone` implementations from this crate.
+- Enable the integration in `cheap-clone` 1.0 instead:
+  `cheap-clone = { version = "1", features = ["hostaddr"] }` together with
+  `hostaddr = "1.1"`.
+- This intentionally removes the old feature and the 0.3 trait implementations.
+  Consumers using them must update their manifests and trait bounds; retaining
+  the old feature name as a forward would introduce a circular dependency.
+- Publish this version before `cheap-clone` 1.0, which requires `hostaddr >= 1.1`.
+
 ## 1.0.0 (2026-10-15)
 
 > First stable release of the 1.0 API.

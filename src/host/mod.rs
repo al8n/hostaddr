@@ -70,9 +70,6 @@ where
   }
 }
 
-#[cfg(feature = "cheap-clone")]
-impl<S: cheap_clone::CheapClone> cheap_clone::CheapClone for Host<S> {}
-
 impl<'a> Host<&'a str> {
   /// Parses an ASCII [`Host`] from `&str`.
   ///

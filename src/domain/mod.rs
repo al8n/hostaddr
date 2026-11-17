@@ -1106,9 +1106,6 @@ const _: () = {
   from_domain_buffer!(Bytes => as_bytes::copy_from_slice);
 };
 
-#[cfg(feature = "cheap-clone")]
-impl<S: cheap_clone::CheapClone> cheap_clone::CheapClone for Domain<S> {}
-
 #[cfg(all(feature = "tinyvec_1", any(feature = "std", feature = "alloc")))]
 const _: () = {
   use tinyvec_1::TinyVec;

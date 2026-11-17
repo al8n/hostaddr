@@ -1,6 +1,6 @@
 [package]
 name = "hostaddr"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 repository = "https://github.com/al8n/hostaddr"
 documentation = "https://docs.rs/hostaddr"
@@ -21,7 +21,6 @@ alloc = [
   "memchr/alloc",
   "serde?/alloc",
   "tinyvec_1?/alloc",
-  "cheap-clone?/alloc",
 ]
 std = [
   "alloc",
@@ -36,14 +35,13 @@ std = [
   "triomphe_0_1?/default",
   "bytes_1?/default",
   "tinyvec_1?/default",
-  "cheap-clone?/default",
 ]
 
-smol_str_0_3 = ["dep:smol_str_0_3", "cheap-clone?/smol_str_0_3", "alloc"]
+smol_str_0_3 = ["dep:smol_str_0_3", "alloc"]
 smol_str = ["smol_str_0_3"]
-triomphe_0_1 = ["dep:triomphe_0_1", "cheap-clone?/triomphe_0_1", "alloc"]
+triomphe_0_1 = ["dep:triomphe_0_1", "alloc"]
 triomphe = ["triomphe_0_1"]
-bytes_1 = ["dep:bytes_1", "cheap-clone?/bytes_1", "alloc"]
+bytes_1 = ["dep:bytes_1", "alloc"]
 bytes = ["bytes_1"]
 tinyvec_1 = ["dep:tinyvec_1", "alloc"]
 tinyvec = ["tinyvec_1"]
@@ -70,7 +68,6 @@ memchr = { version = "2", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 simdutf8 = { version = "0.1", default-features = false }
 thiserror = { version = "2", default-features = false }
-cheap-clone = { version = "0.3.2", default-features = false, optional = true }
 
 idna = { version = "1", default-features = false, optional = true }
 getrandom = { version = "0.4", default-features = false, optional = true }

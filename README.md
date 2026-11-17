@@ -36,17 +36,10 @@ them as identity keys when that is the desired policy.
 
 ## Release status
 
-`1.0.0` (2026-10-15) is the latest published stable release. It was promoted
-from the published `1.0.0-rc.3` validation candidate; production API,
-features, runtime dependencies, and wire semantics are unchanged. It:
-
-- validates the frozen host/address and IPC taxonomy APIs;
-- requires Rust `1.89` or newer;
-- keeps `no_std`/`no-alloc` and `alloc` feature combinations buildable;
-- documents the Serde representation and compatibility policy;
-- validates ASCII `xn--` A-labels through UTS46 on allocating entry points; and
-- preserves the stack-only structural behavior of `try_from_ascii_*` and
-  `verify_ascii_domain`.
+Version `1.1.0` moves `CheapClone` support to `cheap-clone` 1.0. The old
+`hostaddr/cheap-clone` feature and dependency are removed; see the migration
+instructions below. Rust `1.89` remains the minimum supported version, with
+`no_std`/no-allocation and `alloc` configurations supported.
 
 ## Features
 
@@ -67,7 +60,7 @@ features, runtime dependencies, and wire semantics are unchanged. It:
 
 ```toml
 [dependencies]
-hostaddr = "1"
+hostaddr = "1.1"
 ```
 
 ### Feature Flags
@@ -80,7 +73,6 @@ hostaddr = "1"
 | **`serde`** | Serialize/deserialize support |
 | **`arbitrary`** | Fuzzing with `arbitrary` crate |
 | **`quickcheck`** | Property-based generators for host builds; also compile-checked for wasm with the `wasm_js` backend |
-| **`cheap-clone`** | `CheapClone` trait for smart pointer types |
 | **`smol_str`** | `SmolStr` storage support |
 | **`bytes`** | `Bytes` storage support |
 | **`triomphe`** | `triomphe::Arc` storage support |
@@ -89,6 +81,26 @@ hostaddr = "1"
 
 Only the features listed in this table are public. The old implicit `idna`
 feature was removed; enable `alloc` or `std` to use the crate's IDNA support.
+
+### CheapClone support
+
+Enable this integration on `cheap-clone`, which now owns the implementations:
+
+```toml
+hostaddr = "1.1"
+cheap-clone = { version = "1", features = ["hostaddr"] }
+```
+
+Remove `features = ["cheap-clone"]` from the `hostaddr` dependency and migrate
+uses of the 0.3 trait to `cheap-clone` 1.0. Both crates must be upgraded together
+when this integration is used. Shared storage such as `Arc<str>`, borrowed
+storage, and the fixed-size `Buffer` are supported; generic storage must
+implement `CheapClone`. Enable matching `cheap-clone` storage features when
+using `Bytes`, `SmolStr`, or `triomphe::Arc`.
+
+For no-allocation configurations, set `default-features = false` on both
+dependencies. Enable `alloc` on both when allocating storage is needed without
+`std`.
 
 ## Quick Start
 
